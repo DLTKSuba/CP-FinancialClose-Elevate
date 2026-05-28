@@ -65,6 +65,12 @@ export interface DropdownProps {
    * falls back to this user id (must match an option `value`).
    */
   clearAllUsersFallbackValue?: string
+  /** Option `value` for the signed-in user (e.g. `joe`). */
+  currentUserOptionValue?: string
+  /** Trigger label when only `currentUserOptionValue` is selected (e.g. `My tasks`). */
+  currentUserTriggerLabel?: string
+  /** Secondary hint beside the current-user row in the apply-cancel panel (e.g. `my tasks`). */
+  currentUserRowHint?: string
   /**
    * Checkboxes + draft selection; **Apply** commits, **Cancel** or outside click discards.
    * Requires `multiple`, `allOptionValue`, and `options` listing only assignable users
@@ -111,6 +117,9 @@ export function Dropdown({
   allOptionValue,
   allUsersCheckboxLabel = 'All users',
   clearAllUsersFallbackValue,
+  currentUserOptionValue,
+  currentUserTriggerLabel,
+  currentUserRowHint,
   multipleCommitMode,
   panelSearchable = false,
   panelSearchPlaceholder = 'Search users',
@@ -144,6 +153,45 @@ export function Dropdown({
     )
   }, [options, panelSearchable, searchQuery, useApplyPanel])
 
+  const { panelCurrentUserOption, panelOtherOptions } = useMemo(() => {
+    if (!useApplyPanel || !currentUserOptionValue) {
+      const sorted = [...filteredPanelOptions].sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+      )
+      return { panelCurrentUserOption: null, panelOtherOptions: sorted }
+    }
+    const current = filteredPanelOptions.find((o) => o.value === currentUserOptionValue) ?? null
+    const others = filteredPanelOptions
+      .filter((o) => o.value !== currentUserOptionValue)
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+    return { panelCurrentUserOption: current, panelOtherOptions: others }
+  }, [filteredPanelOptions, useApplyPanel, currentUserOptionValue])
+
+  const renderPanelAssigneeRow = (option: Option) => {
+    const isCurrentUser =
+      currentUserOptionValue != null && option.value === currentUserOptionValue
+    return (
+      <div
+        key={option.value}
+        className={clsx(
+          'dropdown__menu-row',
+          isCurrentUser && currentUserRowHint && 'dropdown__menu-row--with-hint'
+        )}
+      >
+        <Checkbox
+          id={`${dropdownId}-user-${option.value}`}
+          checked={draftValues.includes(option.value)}
+          disabled={option.disabled}
+          onChange={(e) => handleUserCheckboxChange(option.value, e)}
+          label={option.label}
+        />
+        {isCurrentUser && currentUserRowHint ? (
+          <span className="dropdown__menu-row-hint">{currentUserRowHint}</span>
+        ) : null}
+      </div>
+    )
+  }
+
   const canAddFromSearch = Boolean(
     useApplyPanel &&
       panelSearchable &&
@@ -175,10 +223,18 @@ export function Dropdown({
     }
     const selectedIds = allOptionValue ? v.filter((id) => id !== allOptionValue) : [...v]
     if (selectedIds.length === 0) return placeholder
-    if (selectedIds.length === 1) {
-      return options.find((o) => o.value === selectedIds[0])?.label ?? selectedIds[0]
+    const n = selectedIds.length
+    if (n === 1) {
+      const onlyId = selectedIds[0]
+      if (
+        currentUserOptionValue &&
+        currentUserTriggerLabel &&
+        onlyId === currentUserOptionValue
+      ) {
+        return currentUserTriggerLabel
+      }
     }
-    return `${selectedIds.length} users selected`
+    return n === 1 ? "1 person's task" : `${n} people's task`
   })()
 
   const setMultiValues = (next: string[]) => {
@@ -398,17 +454,11 @@ export function Dropdown({
             />
           </div>
         ) : null}
-        {filteredPanelOptions.map((option) => (
-          <div key={option.value} className="dropdown__menu-row">
-            <Checkbox
-              id={`${dropdownId}-user-${option.value}`}
-              checked={draftValues.includes(option.value)}
-              disabled={option.disabled}
-              onChange={(e) => handleUserCheckboxChange(option.value, e)}
-              label={option.label}
-            />
-          </div>
-        ))}
+        {panelCurrentUserOption ? renderPanelAssigneeRow(panelCurrentUserOption) : null}
+        {panelCurrentUserOption && panelOtherOptions.length > 0 ? (
+          <div className="dropdown__menu-divider" role="separator" aria-hidden />
+        ) : null}
+        {panelOtherOptions.map((option) => renderPanelAssigneeRow(option))}
       </div>
       {canAddFromSearch ? (
         <div className="dropdown__menu-add-row">

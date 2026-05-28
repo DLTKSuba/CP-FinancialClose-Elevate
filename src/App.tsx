@@ -67,13 +67,93 @@ const CLOSING_ROLE_OPTIONS: Option[] = [
 
 const CLOSING_USER_FILTER_ALL = '__all__'
 const CLOSING_CURRENT_USER_ID = 'joe'
+const CLOSING_ASSIGNEE_MAX = 100
 
-const BASE_CLOSING_ASSIGNEE_OPTIONS: Option[] = [
-  { value: 'joe', label: 'Joe Smith (You)' },
-  { value: 'jane', label: 'Jane Doe' },
-  { value: 'alice', label: 'Alice Chen' },
-  { value: 'bob', label: 'Bob Martinez' },
-]
+const CLOSING_ASSIGNEE_FIRST_NAMES = [
+  'Alice',
+  'Bob',
+  'Carol',
+  'David',
+  'Emma',
+  'Frank',
+  'Grace',
+  'Henry',
+  'Ivy',
+  'James',
+  'Karen',
+  'Leo',
+  'Maria',
+  'Nina',
+  'Omar',
+  'Paula',
+  'Quinn',
+  'Rita',
+  'Sam',
+  'Tina',
+  'Uma',
+  'Victor',
+  'Wendy',
+  'Xavier',
+  'Yuki',
+  'Zoe',
+] as const
+
+const CLOSING_ASSIGNEE_LAST_NAMES = [
+  'Adams',
+  'Baker',
+  'Chen',
+  'Davis',
+  'Evans',
+  'Foster',
+  'Garcia',
+  'Hill',
+  'Ivanov',
+  'Johnson',
+  'Kim',
+  'Lee',
+  'Martinez',
+  'Nguyen',
+  'Olsen',
+  'Patel',
+  'Quinn',
+  'Rivera',
+  'Smith',
+  'Taylor',
+  'Upton',
+  'Vargas',
+  'White',
+  'Young',
+  'Zhang',
+] as const
+
+/** Demo assignees for the Closing Manager user filter (max 100, Joe Smith is current user). */
+function buildClosingAssigneeOptions(maxPeople = CLOSING_ASSIGNEE_MAX): Option[] {
+  const options: Option[] = [
+    { value: CLOSING_CURRENT_USER_ID, label: 'Joe Smith' },
+    { value: 'jane', label: 'Jane Doe' },
+    { value: 'alice', label: 'Alice Chen' },
+    { value: 'bob', label: 'Bob Martinez' },
+  ]
+  const seenLabels = new Set(options.map((o) => o.label))
+  let seq = 0
+
+  while (options.length < maxPeople) {
+    const first = CLOSING_ASSIGNEE_FIRST_NAMES[seq % CLOSING_ASSIGNEE_FIRST_NAMES.length]
+    const last =
+      CLOSING_ASSIGNEE_LAST_NAMES[
+        Math.floor(seq / CLOSING_ASSIGNEE_FIRST_NAMES.length) % CLOSING_ASSIGNEE_LAST_NAMES.length
+      ]
+    const label = `${first} ${last}`
+    seq += 1
+    if (seenLabels.has(label)) continue
+    seenLabels.add(label)
+    options.push({ value: `assignee-${seq}`, label })
+  }
+
+  return options
+}
+
+const BASE_CLOSING_ASSIGNEE_OPTIONS: Option[] = buildClosingAssigneeOptions()
 
 const CLOSING_PROGRESS_BARS: LifecycleBarChartBar[] = [
   {
@@ -1597,12 +1677,16 @@ function HomeShell() {
                 multiple
                 multipleCommitMode="apply-cancel"
                 panelSearchable
-                panelSearchPlaceholder="Search or add users"
+                panelSearchPlaceholder="Search"
                 onAddSearchResult={handleAddAssigneeFromSearch}
                 values={userFilters}
                 onValuesChange={setUserFilters}
                 allOptionValue={CLOSING_USER_FILTER_ALL}
+                allUsersCheckboxLabel="All tasks"
                 clearAllUsersFallbackValue={CLOSING_CURRENT_USER_ID}
+                currentUserOptionValue={CLOSING_CURRENT_USER_ID}
+                currentUserTriggerLabel="My tasks"
+                currentUserRowHint="my tasks"
                 triggerClassName="btn btn--outline btn--md"
                 triggerIconSize="sm"
                 options={assigneeOptions}
