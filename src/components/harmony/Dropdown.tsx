@@ -60,6 +60,10 @@ export interface DropdownProps {
   allOptionValue?: string
   /** Label for the synthetic “All” row checkbox when using `multipleCommitMode`. */
   allUsersCheckboxLabel?: string
+  /** Trigger label when only `allOptionValue` is selected (e.g. `100 selected`). Falls back to `allUsersCheckboxLabel`. */
+  allOptionTriggerLabel?: string
+  /** Secondary hint beside the “All” row in the apply-cancel panel (e.g. `all tasks`). */
+  allOptionRowHint?: string
   /**
    * With `multipleCommitMode: 'apply-cancel'`, when “All users” is unchecked, selection
    * falls back to this user id (must match an option `value`).
@@ -116,6 +120,8 @@ export function Dropdown({
   onValuesChange,
   allOptionValue,
   allUsersCheckboxLabel = 'All users',
+  allOptionTriggerLabel,
+  allOptionRowHint,
   clearAllUsersFallbackValue,
   currentUserOptionValue,
   currentUserTriggerLabel,
@@ -219,7 +225,7 @@ export function Dropdown({
     if (!multiple) return ''
     const v = currentMultiValues
     if (allOptionValue && v.length === 1 && v[0] === allOptionValue) {
-      return allUsersCheckboxLabel
+      return allOptionTriggerLabel ?? allUsersCheckboxLabel
     }
     const selectedIds = allOptionValue ? v.filter((id) => id !== allOptionValue) : [...v]
     if (selectedIds.length === 0) return placeholder
@@ -233,8 +239,9 @@ export function Dropdown({
       ) {
         return currentUserTriggerLabel
       }
+      return 'Task selected (1)'
     }
-    return n === 1 ? "1 person's task" : `${n} people's task`
+    return `Task selected (${n})`
   })()
 
   const setMultiValues = (next: string[]) => {
@@ -444,19 +451,27 @@ export function Dropdown({
         </div>
       ) : null}
       <div className="dropdown__menu-body">
+        {panelCurrentUserOption ? renderPanelAssigneeRow(panelCurrentUserOption) : null}
+        {panelCurrentUserOption && (allOptionValue || panelOtherOptions.length > 0) ? (
+          <div className="dropdown__menu-divider" role="separator" aria-hidden />
+        ) : null}
         {allOptionValue ? (
-          <div className="dropdown__menu-row">
+          <div
+            className={clsx(
+              'dropdown__menu-row',
+              allOptionRowHint && 'dropdown__menu-row--with-hint'
+            )}
+          >
             <Checkbox
               id={`${dropdownId}-all-users`}
               checked={allDraftChecked}
               onChange={handleAllUsersCheckboxChange}
               label={allUsersCheckboxLabel}
             />
+            {allOptionRowHint ? (
+              <span className="dropdown__menu-row-hint">{allOptionRowHint}</span>
+            ) : null}
           </div>
-        ) : null}
-        {panelCurrentUserOption ? renderPanelAssigneeRow(panelCurrentUserOption) : null}
-        {panelCurrentUserOption && panelOtherOptions.length > 0 ? (
-          <div className="dropdown__menu-divider" role="separator" aria-hidden />
         ) : null}
         {panelOtherOptions.map((option) => renderPanelAssigneeRow(option))}
       </div>

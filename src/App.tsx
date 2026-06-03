@@ -155,32 +155,28 @@ function buildClosingAssigneeOptions(maxPeople = CLOSING_ASSIGNEE_MAX): Option[]
 
 const BASE_CLOSING_ASSIGNEE_OPTIONS: Option[] = buildClosingAssigneeOptions()
 
-const CLOSING_PROGRESS_BARS: LifecycleBarChartBar[] = [
+const CLOSING_PROGRESS_BAR_TEMPLATE: Omit<LifecycleBarChartBar, 'value'>[] = [
   {
     id: 'not-started',
     label: 'Not Started',
-    value: 1,
     color: '#94a3b8',
     description: 'Tasks not yet started',
   },
   {
     id: 'ready',
     label: 'Ready',
-    value: 1,
     color: '#22c55e',
     description: 'Tasks ready to run',
   },
   {
     id: 'in-process',
     label: 'In-Process',
-    value: 1,
     color: '#eab308',
     description: 'Tasks in progress',
   },
   {
     id: 'waiting',
     label: 'Waiting',
-    value: 2,
     color: '#ef4444',
     description: 'Tasks waiting on dependencies',
   },
@@ -372,6 +368,56 @@ function closingPlanTaskPool(userFilters: string[]): ClosingPlanTaskRow[] {
     : CLOSING_PLAN_TASK_ROWS_BASE
 }
 
+/** Tasks visible for the current assignee filter (All tasks, My tasks, or selected people). */
+function closingTasksForFilters(userFilters: string[]): ClosingPlanTaskRow[] {
+  const showAll =
+    userFilters.length === 1 && userFilters[0] === CLOSING_USER_FILTER_ALL
+  const pool = closingPlanTaskPool(userFilters)
+  return showAll ? pool : pool.filter((row) => userFilters.includes(row.assigneeId))
+}
+
+type ClosingMetricsSummary = {
+  openTasks: number
+  totalTasks: number
+  percentClosed: number
+}
+
+function closingMetricsFromTasks(tasks: ClosingPlanTaskRow[]): ClosingMetricsSummary {
+  const totalTasks = tasks.length
+  const closedCount = tasks.filter((t) => t.status === 'ready').length
+  const openTasks = totalTasks - closedCount
+  const percentClosed =
+    totalTasks === 0 ? 0 : Math.round((closedCount / totalTasks) * 100)
+  return { openTasks, totalTasks, percentClosed }
+}
+
+function closingProgressBarsFromTasks(tasks: ClosingPlanTaskRow[]): LifecycleBarChartBar[] {
+  const counts: Record<string, number> = {
+    'not-started': 0,
+    ready: 0,
+    'in-process': 0,
+    waiting: 0,
+  }
+  for (const task of tasks) {
+    if (task.status in counts) {
+      counts[task.status] += 1
+    }
+  }
+  return CLOSING_PROGRESS_BAR_TEMPLATE.map((bar) => ({
+    ...bar,
+    value: counts[bar.id] ?? 0,
+  }))
+}
+
+function closingProgressChartYAxisMax(bars: LifecycleBarChartBar[]): number {
+  const maxVal = Math.max(0, ...bars.map((b) => b.value))
+  if (maxVal <= 0) return 3
+  if (maxVal <= 3) return 3
+  if (maxVal <= 5) return 5
+  if (maxVal <= 10) return 10
+  return Math.ceil(maxVal / 5) * 5
+}
+
 function assigneeLabelForRow(
   row: ClosingPlanTaskRow,
   assigneeOptions: Option[]
@@ -388,12 +434,7 @@ function ClosingPlanTasksTableBody({
   assigneeOptions: Option[]
   showUserColumn: boolean
 }) {
-  const showAll =
-    userFilters.length === 1 && userFilters[0] === CLOSING_USER_FILTER_ALL
-  const pool = closingPlanTaskPool(userFilters)
-  const visibleRows = showAll
-    ? pool
-    : pool.filter((row) => userFilters.includes(row.assigneeId))
+  const visibleRows = closingTasksForFilters(userFilters)
 
   const colSpan = showUserColumn ? 6 : 5
 
@@ -1606,6 +1647,26 @@ function HomeShell() {
     [closingPlanShowUser],
   )
 
+  const closingVisibleTasks = useMemo(
+    () => closingTasksForFilters(userFilters),
+    [userFilters],
+  )
+
+  const closingMetrics = useMemo(
+    () => closingMetricsFromTasks(closingVisibleTasks),
+    [closingVisibleTasks],
+  )
+
+  const closingProgressBars = useMemo(
+    () => closingProgressBarsFromTasks(closingVisibleTasks),
+    [closingVisibleTasks],
+  )
+
+  const closingProgressYAxisMax = useMemo(
+    () => closingProgressChartYAxisMax(closingProgressBars),
+    [closingProgressBars],
+  )
+
   const commandCenterTabs = useMemo(
     () =>
       CC_MAIN_TAB_IDS.map((id) => ({
@@ -1683,6 +1744,7 @@ function HomeShell() {
                 onValuesChange={setUserFilters}
                 allOptionValue={CLOSING_USER_FILTER_ALL}
                 allUsersCheckboxLabel="All tasks"
+                allOptionRowHint="all tasks"
                 clearAllUsersFallbackValue={CLOSING_CURRENT_USER_ID}
                 currentUserOptionValue={CLOSING_CURRENT_USER_ID}
                 currentUserTriggerLabel="My tasks"
@@ -1713,24 +1775,24 @@ function HomeShell() {
                 <div className="closing-metrics-row">
                   <div className="closing-metric-card">
                     <div className="closing-metric-card__label">Open Tasks</div>
-                    <div className="closing-metric-card__value">10</div>
+                    <div className="closing-metric-card__value">{closingMetrics.openTasks}</div>
                   </div>
                   <div className="closing-metric-card">
                     <div className="closing-metric-card__label">Total Tasks</div>
-                    <div className="closing-metric-card__value">50</div>
+                    <div className="closing-metric-card__value">{closingMetrics.totalTasks}</div>
                   </div>
                   <div className="closing-metric-card">
                     <div className="closing-metric-card__label">Percent Closed</div>
-                    <div className="closing-metric-card__value">20%</div>
+                    <div className="closing-metric-card__value">{closingMetrics.percentClosed}%</div>
                   </div>
                 </div>
               </section>
 
               <LifecycleBarChart
-                key={refreshTick}
+                key={`${refreshTick}-${userFilters.join(',')}`}
                 title="Closing Progress"
-                bars={CLOSING_PROGRESS_BARS}
-                yAxisMax={3}
+                bars={closingProgressBars}
+                yAxisMax={closingProgressYAxisMax}
                 className="closing-manager-progress-chart"
               />
 
