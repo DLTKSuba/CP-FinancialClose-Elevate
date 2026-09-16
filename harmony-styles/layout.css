@@ -74,6 +74,20 @@
   letter-spacing: -0.025em;
 }
 
+.header__version {
+  min-width: 0;
+}
+
+.header__version .dropdown__trigger {
+  min-width: unset;
+  width: max-content;
+  height: var(--space-8);
+  padding: 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
 .header__title-product {
   color: var(--theme-primary);
 }

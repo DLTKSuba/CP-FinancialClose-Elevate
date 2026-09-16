@@ -55,6 +55,27 @@
   border-left-color: transparent !important;
 }
 
+/* Expanded Dela reads as a flat primary tile with a white mark, not Harmony's gradient tile. */
+.command-center-shell .right-sidebar[data-panel-open="true"] .right-sidebar__item[data-active="true"]:has(.right-sidebar__dela-logo),
+.command-center-shell .right-sidebar[data-panel-open="true"] .right-sidebar__item[data-active="true"]:has(.right-sidebar__dela-logo):hover {
+  background: transparent;
+}
+
+.command-center-shell .right-sidebar__dela-logo--active {
+  background-color: var(--theme-primary);
+  border-radius: var(--radius-12);
+}
+
+/* Harmony flattens the rail into the panel once one opens; keep the floating cards instead,
+   so the Dela panel slides behind the rail rather than under bare icons. */
+.command-center-shell .right-sidebar[data-panel-open="true"] .right-sidebar__section {
+  background-color: var(--nav-bg);
+  border-top: var(--border-width-thin) solid var(--border-color);
+  border-bottom: var(--border-width-thin) solid var(--border-color);
+  border-radius: var(--radius-12) 0 0 var(--radius-12);
+  box-shadow: var(--shadow-xl);
+}
+
 /* Command Center home card: enforce Harmony outer radius + clip (children often square). */
 .command-center-home.card {
   background-color: #ffffff;
@@ -717,6 +738,15 @@ html.theme-cp:not(.dark) .command-center-requisition-late-items__vs-sub {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+.command-center-use-case {
+  min-width: 0;
+}
+
+.command-center-use-case .dropdown__trigger {
+  min-width: 16rem;
+  max-width: 22rem;
 }
 
 /* Closing Manager Command Center (reference UI) */

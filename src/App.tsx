@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Routes, Route } from 'react-router-dom'
 import { ShellLayout } from './components/harmony/ShellLayout'
 import type { ShellLayoutProps } from './components/harmony/ShellLayout'
+import type { RightSidebarSection } from './components/harmony/RightSidebar'
 import { Card } from './components/harmony/Card'
 import { Button } from './components/harmony/Button'
 import { TabStrip } from './components/harmony/TabStrip'
@@ -13,12 +14,24 @@ import { LifecycleBarChart } from './components/harmony/LifecycleBarChart'
 import type { LifecycleBarChartBar } from './components/harmony/LifecycleBarChart'
 import { Link } from './components/harmony/Link'
 import { Icon } from './components/harmony/Icon'
+import { DelaPanelContent } from './components/harmony/DelaPanelContent'
+import { DelaPanelContentV2 } from './components/harmony/DelaPanelContentV2'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { ComponentDemoPage } from './pages/ComponentDemoPage'
 import { RightSidebarPanelDemosPage } from './pages/RightSidebarPanelDemosPage'
 
 /** Default product theme for the designer preview (change via document.documentElement.classList if needed). */
 const DEFAULT_THEME = 'theme-cp'
+
+const PROTOTYPE_VERSION_OPTIONS: Option[] = [
+  { value: 'v1', label: 'V1' },
+  { value: 'v2', label: 'Version 2' },
+]
+
+const USE_CASE_SCENARIO_OPTIONS: Option[] = [
+  { value: 'end-to-end', label: 'End-End experience' },
+  { value: 'dela-not-enabled', label: 'Close through a not enabled' },
+]
 
 /**
  * Per-theme ShellLayout prop defaults.
@@ -27,7 +40,7 @@ const DEFAULT_THEME = 'theme-cp'
  */
 const THEME_SHELL_PROPS: Record<string, Partial<ShellLayoutProps>> = {
   'theme-cp': {
-    productName: 'Costpoint',
+    productName: 'Agentic Close',
     logoSrc: '/logos/CPVPLogo.svg',
     showFooter: false,
     showFloatingNav: true,
@@ -56,6 +69,36 @@ const THEME_SHELL_PROPS: Record<string, Partial<ShellLayoutProps>> = {
     rightSidebarVariant: 'maconomy',
   },
 }
+
+/** Command Center right rail: Dela + alerts, output, then input/assistance. */
+const COMMAND_CENTER_RIGHT_RAIL: RightSidebarSection[] = [
+  {
+    items: [
+      {
+        label: 'Dela AI',
+        isCustom: true,
+        customSrc: '/RS_DelaDefault.svg',
+        customSrcActive: '/RS_Dela_OnPrimary.svg',
+      },
+      { icon: 'bell', label: 'Notifications' },
+      { icon: 'upload-download', label: 'Upload and download' },
+    ],
+  },
+  {
+    items: [
+      { icon: 'printer', label: 'Print' },
+      { icon: 'identification', label: 'Details' },
+    ],
+  },
+  {
+    items: [
+      { icon: 'mic-slash', label: 'Mute microphone' },
+      { icon: 'signal-slash', label: 'Mute audio' },
+      { icon: 'keyboard', label: 'Keyboard shortcuts' },
+      { icon: 'question-mark-circle', label: 'Help' },
+    ],
+  },
+]
 
 /** Command Center primary tabs (Closing Manager reference UI). */
 const CC_MAIN_TAB_IDS = ['general-ledger', 'financial-review', 'closing-manager'] as const
@@ -1612,6 +1655,9 @@ export function RequisitionDetailsTabView({ prId }: { prId: string }) {
 }
 
 function HomeShell() {
+  const [prototypeVersion, setPrototypeVersion] = useState('v1')
+  const [useCaseScenario, setUseCaseScenario] = useState('end-to-end')
+  const closeThroughDelaEnabled = useCaseScenario !== 'dela-not-enabled'
   const [activeTabId, setActiveTabId] = useState<string>('closing-manager')
   const [refreshTick, setRefreshTick] = useState(0)
   const [roleFilter, setRoleFilter] = useState('accountant')
@@ -1706,8 +1752,49 @@ function HomeShell() {
       className="command-center-shell"
       pageHeaderTitle="Command Center"
       pageHeaderShowDefaultButtons={false}
+      pageHeaderActions={
+        <Dropdown
+          id="cc-use-case-scenario"
+          name="useCaseScenario"
+          className="command-center-use-case"
+          triggerClassName="btn btn--outline btn--md"
+          triggerIconSize="sm"
+          options={USE_CASE_SCENARIO_OPTIONS}
+          value={useCaseScenario}
+          onChange={setUseCaseScenario}
+        />
+      }
       companyName="Company name (system/environment name)"
+      brandAccessory={
+        <Dropdown
+          id="cc-prototype-version"
+          name="prototypeVersion"
+          className="header__version"
+          options={PROTOTYPE_VERSION_OPTIONS}
+          value={prototypeVersion}
+          onChange={setPrototypeVersion}
+          triggerIconSize="sm"
+        />
+      }
       floatingNavActions={floatingNavActions}
+      rightSidebarSections={COMMAND_CENTER_RIGHT_RAIL}
+      rightSidebarAlign="content"
+      rightSidebarTopAnchor='[aria-label="Refresh"]'
+      rightShellPanelVariant="dela"
+      rightShellPanelBottomAlign="content"
+      rightShellPanelDelaSlot={
+        prototypeVersion === 'v2' ? (
+          <DelaPanelContentV2
+            key={`v2-${useCaseScenario}`}
+            closeThroughDelaEnabled={closeThroughDelaEnabled}
+          />
+        ) : (
+          <DelaPanelContent
+            key={`v1-${useCaseScenario}`}
+            closeThroughDelaEnabled={closeThroughDelaEnabled}
+          />
+        )
+      }
     >
       <Card primary elevated className="command-center-home">
         <div className="card__body">

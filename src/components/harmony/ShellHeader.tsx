@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { Icon } from './Icon'
@@ -22,6 +23,8 @@ export interface ShellHeaderProps {
   showCompanyPicker?: boolean
   companyColor?: string
   companies?: CompanyOption[]
+  /** Rendered beside the product name (e.g. a prototype version switcher). */
+  brandAccessory?: ReactNode
   className?: string
 }
 
@@ -32,6 +35,7 @@ export function ShellHeader({
   showCompanyPicker = true,
   companyColor,
   companies = PPM_COMPANIES,
+  brandAccessory,
   className = '',
 }: ShellHeaderProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -70,6 +74,7 @@ export function ShellHeader({
           <img src={logoSrc} alt="Logo" className="header__logo" />
           <span className="header__title">{productName}</span>
         </Link>
+        {brandAccessory}
       </div>
       <div className="header__actions">
         {showCompanyPicker && (

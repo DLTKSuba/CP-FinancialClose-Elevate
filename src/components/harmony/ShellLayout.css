@@ -72,6 +72,21 @@
   display: contents;
 }
 
+/* Rail starts at the top of the main content instead of being vertically centred */
+.shell-layout .shell-layout__container[data-rail-align="content"] .shell-layout__right-sidebar {
+  top: var(--shell-rail-content-top-offset, 50%);
+  transform: none;
+}
+
+/* Bottom edge follows the main content instead of the viewport (offset measured in ShellLayout),
+   then clears it by one more step so the panel stops short of the content edge. */
+.shell-layout .shell-layout__container[data-panel-bottom-align="content"] .shell-panel--right {
+  bottom: max(
+    calc(var(--shell-panel-content-bottom-offset, 0px) + var(--space-2-5)),
+    calc(var(--space-2-5) / 2)
+  );
+}
+
 /* Footer-aware sidebar positioning (from Harmony components.css – keeps sidebars above footer) */
 
 /* CP variant: gap from header */

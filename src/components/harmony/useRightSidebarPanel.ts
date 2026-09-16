@@ -41,11 +41,13 @@ export function useRightSidebarPanel(options: UseRightSidebarPanelOptions = {}) 
   const [title, setTitle] = useState(initialTitle)
   const [titleIcon, setTitleIcon] = useState<string | undefined>(initialTitleIcon)
   const [useGradientHeader, setUseGradientHeader] = useState(false)
+  const [isDelaAI, setIsDelaAI] = useState(false)
   const [activeItemKey, setActiveItemKey] = useState<string | null>(null)
 
   const closePanel = useCallback(() => {
     setOpen(false)
     setUseGradientHeader(false)
+    setIsDelaAI(false)
     setActiveItemKey(null)
     setTitle(initialTitle)
     setTitleIcon(initialTitleIcon)
@@ -69,8 +71,12 @@ export function useRightSidebarPanel(options: UseRightSidebarPanelOptions = {}) 
 
       setTitle(panelTitle)
       setUseGradientHeader(shouldUseGradient)
+      setIsDelaAI(isDelaAI)
       if (!preserveDelaLayout) {
         setTitleIcon(iconName)
+      } else if (isDelaAI) {
+        // Dela AI has no title icon of its own; drop the previous panel's icon.
+        setTitleIcon(undefined)
       }
       setOpen(true)
       setActiveItemKey(itemKey)
@@ -83,6 +89,7 @@ export function useRightSidebarPanel(options: UseRightSidebarPanelOptions = {}) 
     title,
     titleIcon,
     useGradientHeader,
+    isDelaAI,
     activeItemKey,
     closePanel,
     handleItemActivate,

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { ShellHeader } from './ShellHeader'
 import type { CompanyOption } from './ShellHeader'
@@ -25,6 +25,8 @@ export interface ShellLayoutProps {
   companyColor?: string
   /** Company options for the header picker; when not provided, ShellHeader uses its default list. */
   companies?: CompanyOption[]
+  /** Rendered beside the product name in the shell header. */
+  brandAccessory?: ReactNode
   // CP-specific props
   showFloatingNav?: boolean
   floatingNavVariant?: 'full' | 'compact'
@@ -51,6 +53,23 @@ export interface ShellLayoutProps {
   rightShellPanelInitialTitle?: string
   rightShellPanelInitialTitleIcon?: string
   rightShellPanelSlot?: ReactNode
+  /** Panel body used only while a Dela AI rail item is active; falls back to rightShellPanelSlot. */
+  rightShellPanelDelaSlot?: ReactNode
+  /**
+   * 'viewport' (default) keeps the Harmony footer-aware bottom edge.
+   * 'content' ends the right panel where the main content ends.
+   */
+  rightShellPanelBottomAlign?: 'viewport' | 'content'
+  /**
+   * 'center' (default) keeps the Harmony vertically centred rail.
+   * 'content' starts the rail where the main content starts.
+   */
+  rightSidebarAlign?: 'center' | 'content'
+  /**
+   * With rightSidebarAlign='content', a selector inside the main content whose vertical centre
+   * the first rail item lines up with (e.g. a toolbar button). Falls back to the content top.
+   */
+  rightSidebarTopAnchor?: string
   pageHeaderTitle?: string
   pageHeaderSubtitle?: string
   /** When false, hides placeholder Primary/Secondary buttons when no custom header buttons are set. */
@@ -80,6 +99,7 @@ export function ShellLayout({
   showCompanyPicker = true,
   companyColor,
   companies,
+  brandAccessory,
   showFloatingNav,
   floatingNavVariant,
   showExecute,
@@ -102,6 +122,10 @@ export function ShellLayout({
   rightShellPanelInitialTitle = 'Notifications',
   rightShellPanelInitialTitleIcon = 'bell',
   rightShellPanelSlot,
+  rightShellPanelDelaSlot,
+  rightShellPanelBottomAlign = 'viewport',
+  rightSidebarAlign = 'center',
+  rightSidebarTopAnchor,
   pageHeaderTitle = 'Page title',
   pageHeaderSubtitle,
   pageHeaderShowDefaultButtons = true,
@@ -122,6 +146,8 @@ export function ShellLayout({
 
   const rightShellScopeRef = useRef<HTMLDivElement>(null)
   const rightShellPanelRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
   const rightRailPanel = useRightSidebarPanel({
     shellPanelScopeRef: rightShellScopeRef,
     rightPanelRef: rightShellPanelRef,
@@ -130,6 +156,57 @@ export function ShellLayout({
     initialTitleIcon: rightShellPanelInitialTitleIcon,
   })
 
+  // The rail and panel are fixed to the viewport, so content edges have to be measured.
+  useEffect(() => {
+    const alignBottom = rightShellPanelBottomAlign === 'content'
+    const alignTop = rightSidebarAlign === 'content'
+    if (!alignBottom && !alignTop) return
+    const container = containerRef.current
+    const main = mainRef.current
+    if (!container || !main) return
+
+    const syncOffsets = () => {
+      const styles = getComputedStyle(main)
+      const bounds = main.getBoundingClientRect()
+      if (alignBottom) {
+        const paddingBottom = parseFloat(styles.paddingBottom) || 0
+        const contentBottom = bounds.bottom - paddingBottom
+        const offset = Math.max(0, window.innerHeight - contentBottom)
+        container.style.setProperty('--shell-panel-content-bottom-offset', `${offset}px`)
+      }
+      if (alignTop) {
+        const paddingTop = parseFloat(styles.paddingTop) || 0
+        let offset = bounds.top + paddingTop
+        const anchor = rightSidebarTopAnchor
+          ? main.querySelector<HTMLElement>(rightSidebarTopAnchor)
+          : null
+        const rail = container.querySelector<HTMLElement>('.shell-layout__right-sidebar')
+        const firstItem = rail?.querySelector<HTMLElement>('[data-right-sidebar-item]')
+        if (anchor && rail && firstItem) {
+          const anchorBounds = anchor.getBoundingClientRect()
+          const railBounds = rail.getBoundingClientRect()
+          const itemBounds = firstItem.getBoundingClientRect()
+          // Keep the first rail item centred on the anchor, whatever padding the rail carries.
+          const itemCentreFromRailTop = itemBounds.top + itemBounds.height / 2 - railBounds.top
+          offset = anchorBounds.top + anchorBounds.height / 2 - itemCentreFromRailTop
+        }
+        container.style.setProperty('--shell-rail-content-top-offset', `${Math.max(0, offset)}px`)
+      }
+    }
+
+    syncOffsets()
+    const observer = new ResizeObserver(syncOffsets)
+    observer.observe(main)
+    window.addEventListener('resize', syncOffsets)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', syncOffsets)
+      container.style.removeProperty('--shell-panel-content-bottom-offset')
+      container.style.removeProperty('--shell-rail-content-top-offset')
+    }
+  }, [rightShellPanelBottomAlign, rightSidebarAlign, rightSidebarTopAnchor])
+
   return (
     <div
       className={clsx('shell-layout', className)}
@@ -137,11 +214,14 @@ export function ShellLayout({
       data-use-theme-detection="false"
     >
       <div
+        ref={containerRef}
         className="shell-layout__container"
         data-has-footer={String(effectiveHasFooter)}
         data-has-floating-nav={String(effectiveShowFloatingNav)}
         data-has-right-sidebar={String(showRightSidebar)}
         data-footer-variant={footerVariant}
+        data-panel-bottom-align={rightShellPanelBottomAlign}
+        data-rail-align={rightSidebarAlign}
       >
         <ShellHeader
           productName={productName}
@@ -150,6 +230,7 @@ export function ShellLayout({
           showCompanyPicker={showCompanyPicker}
           companyColor={companyColor}
           companies={companies}
+          brandAccessory={brandAccessory}
           className="shell-layout__header"
         />
 
@@ -200,14 +281,16 @@ export function ShellLayout({
               onClose={rightRailPanel.closePanel}
               className="shell-layout__right-shell-panel"
             >
-              {rightShellPanelSlot ?? (
-                <div style={{ padding: 'var(--space-4)' }}>
-                  <p className="text-secondary" style={{ fontSize: 'var(--text-sm)' }}>
-                    Contextual drawer for the right rail. Icons update the header title, gradient, and
-                    icon when appropriate; Dela panels preserve layout for Dela AI / gradient items.
-                  </p>
-                </div>
-              )}
+              {(rightRailPanel.isDelaAI ? rightShellPanelDelaSlot : undefined) ??
+                rightShellPanelSlot ?? (
+                  <div style={{ padding: 'var(--space-4)' }}>
+                    <p className="text-secondary" style={{ fontSize: 'var(--text-sm)' }}>
+                      Contextual drawer for the right rail. Icons update the header title, gradient,
+                      and icon when appropriate; Dela panels preserve layout for Dela AI / gradient
+                      items.
+                    </p>
+                  </div>
+                )}
             </ShellPanel>
           </div>
         )}
@@ -220,7 +303,7 @@ export function ShellLayout({
           />
         )}
 
-        <main className="shell-layout__main">
+        <main ref={mainRef} className="shell-layout__main">
           {pageHeaderTitle != null && pageHeaderTitle !== '' && (
             <ShellPageHeader
               title={pageHeaderTitle}
