@@ -61,9 +61,17 @@
   background: transparent;
 }
 
+/* Square tile with a soft corner, filled with the theme blue (Harmony's gradient tile is rounder). */
 .command-center-shell .right-sidebar__dela-logo--active {
   background-color: var(--theme-primary);
-  border-radius: var(--radius-12);
+  border-radius: var(--radius-08);
+}
+
+/* Compact rail shrinks the tile to 28px, so the corner shrinks with it. */
+@media (max-width: 1024px) {
+  .command-center-shell .shell-layout__right-sidebar .right-sidebar__dela-logo--active {
+    border-radius: var(--radius-06);
+  }
 }
 
 /* Harmony flattens the rail into the panel once one opens; keep the floating cards instead,

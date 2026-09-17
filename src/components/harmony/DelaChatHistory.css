@@ -1,0 +1,275 @@
+/* Chat History view inside the Dela panel (opened from the clock quick action) */
+
+.dela-history {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--space-3);
+  /* Search, group labels and cards line up with the quick-action row above */
+  margin-left: calc(var(--space-4) * -1);
+  font-family: var(--font-display);
+}
+
+.dela-history__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  /* Matches the back button box so the chevron and title share one centre line */
+  min-height: var(--space-7);
+}
+
+.dela-history__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Sits to the left of the quick-action row's plus */
+  margin-left: calc(var(--space-4) * -1);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dela-history__back:hover {
+  background-color: var(--hover-bg);
+}
+
+.dela-history__back:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+.dela-history__title {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  /* Offsets the back button so the title reads as centred in the panel */
+  padding-right: var(--space-6);
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--label);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+
+.dela-history__search {
+  flex-shrink: 0;
+}
+
+/* Full-height search field: the shell's compact input rules squash it otherwise */
+.dela-history__search .input {
+  height: var(--space-10);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  background-color: var(--dela-panel-card-bg);
+  border-color: var(--border-light);
+  border-radius: var(--radius-16);
+}
+
+/* theme-cp nudges the leading icon to 60%; keep it centred on the field text */
+.dela-history__search .input-wrapper__icon {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dela-history__pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dela-history__pager-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-04);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.dela-history__pager-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--hover-bg);
+}
+
+.dela-history__pager-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.dela-history__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dela-history__scroll::-webkit-scrollbar {
+  width: var(--space-2);
+}
+
+.dela-history__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dela-history__scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: var(--radius-04);
+}
+
+.dela-history__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.dela-history__group-label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+
+.dela-history__card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width-thin) solid var(--border-light);
+  border-radius: var(--radius-08);
+  /* Cards sit on the panel background rather than a white surface */
+  background-color: transparent;
+}
+
+.dela-history__card:hover {
+  border-color: var(--border-color);
+}
+
+/* Status tag stacks above the title, so the card body is a column */
+.dela-history__card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.dela-history__card-main {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dela-history__card-main:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+.dela-history__card-title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+
+.dela-history__card-meta {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
+
+.dela-history__rename {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width-thin) solid var(--theme-primary);
+  border-radius: var(--radius-04);
+  background-color: var(--input-bg);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.dela-history__card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+/* Tag doubles as the control that steps the run state */
+.dela-history__status {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dela-history__status:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-full);
+}
+
+.dela-history__empty {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
+.dela-history__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Dela's purple accent, matching the panel header gradient */
+.dela-history__clear.btn--outline {
+  border-color: var(--gradient-dela-start);
+  color: var(--gradient-dela-start);
+}
+
+.dela-history__clear.btn--outline:hover:not(.btn--disabled) {
+  background-color: var(--dela-bubble-bg);
+}
+
+.dela-history__note {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}

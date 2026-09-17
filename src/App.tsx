@@ -30,7 +30,8 @@ const PROTOTYPE_VERSION_OPTIONS: Option[] = [
 
 const USE_CASE_SCENARIO_OPTIONS: Option[] = [
   { value: 'end-to-end', label: 'End-End experience' },
-  { value: 'dela-not-enabled', label: 'Close through a not enabled' },
+  { value: 'dela-not-enabled', label: 'Close thr Dela is not Enabled' },
+  { value: 'missing-default-job', label: 'Missing default job' },
 ]
 
 /**
@@ -1658,6 +1659,7 @@ function HomeShell() {
   const [prototypeVersion, setPrototypeVersion] = useState('v1')
   const [useCaseScenario, setUseCaseScenario] = useState('end-to-end')
   const closeThroughDelaEnabled = useCaseScenario !== 'dela-not-enabled'
+  const missingDefaultJob = useCaseScenario === 'missing-default-job'
   const [activeTabId, setActiveTabId] = useState<string>('closing-manager')
   const [refreshTick, setRefreshTick] = useState(0)
   const [roleFilter, setRoleFilter] = useState('accountant')
@@ -1787,11 +1789,13 @@ function HomeShell() {
           <DelaPanelContentV2
             key={`v2-${useCaseScenario}`}
             closeThroughDelaEnabled={closeThroughDelaEnabled}
+            missingDefaultJob={missingDefaultJob}
           />
         ) : (
           <DelaPanelContent
             key={`v1-${useCaseScenario}`}
             closeThroughDelaEnabled={closeThroughDelaEnabled}
+            missingDefaultJob={missingDefaultJob}
           />
         )
       }

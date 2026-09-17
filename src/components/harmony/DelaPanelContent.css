@@ -7,7 +7,43 @@
   font-family: var(--font-display);
 }
 
+/* Dela panel header title reads at 14px semibold, not the shell's 18px */
+.shell-panel__header[data-gradient-header='true'] h2.shell-panel__title {
+  font-size: var(--label);
+}
+
+/* Quick actions row pinned to the top left of the chat content area.
+   Negative offset cancels the body padding plus the button padding so the
+   glyphs line up with the "D" of the Dela AI panel title above. */
+.dela-panel__quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  margin-left: calc((var(--space-4) + var(--space-1-5)) * -1);
+  padding-bottom: var(--space-2);
+}
+
+.dela-panel__quick-actions .dela-panel__toolbar-action svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.dela-panel__quick-actions .dela-panel__toolbar-action:disabled {
+  cursor: default;
+  pointer-events: none;
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.dela-panel__quick-actions .dela-panel__toolbar-action:disabled:hover {
+  color: var(--text-secondary);
+  background-color: transparent;
+}
+
 .dela-panel__greeting {
+  width: 100%;
   margin: var(--space-4) 0 0;
   text-align: center;
   font-family: var(--font-display);
@@ -439,8 +475,9 @@
   gap: var(--space-3);
 }
 
-.dela-panel__close-job .alert {
-  padding: var(--space-3);
+.dela-panel__close-job-select,
+.dela-panel__close-job-select .dropdown__trigger {
+  width: 100%;
 }
 
 /* The Dela mark doubles as the reset back to the greeting state */
@@ -623,8 +660,18 @@
 }
 
 /* Dela replies read as page text, not as a tinted bubble */
+.dela-panel__response-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  width: 100%;
+}
+
 .dela-panel__response {
+  display: block;
   min-width: 0;
+  width: 100%;
   margin: 0;
   padding: 0;
   background-color: transparent;
@@ -632,6 +679,30 @@
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   color: var(--text-primary);
+  white-space: normal;
+}
+
+.dela-panel__response--info,
+.dela-panel__response--success,
+.dela-panel__response--warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.dela-panel__response--success {
+  color: var(--color-success);
+}
+
+.dela-panel__response--warning {
+  color: var(--color-warning);
+}
+
+.dela-panel__response-icon {
+  flex-shrink: 0;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: 1px;
 }
 
 .dela-panel__input-action--send {
