@@ -29,6 +29,10 @@ export interface DelaChatHistoryProps {
   onBack: () => void
   /** Called with the past prompt when a chat is reopened from the list. */
   onSelect?: (entry: DelaChatHistoryEntry) => void
+  /** Leaves running close runs out of the list; they live in Running Tasks instead. */
+  excludeRunning?: boolean
+  /** Fires after any edit so callers can refresh counts derived from the session list. */
+  onEntriesChange?: () => void
 }
 
 /** Chats per page; the search chevrons step through the pages. */
@@ -81,6 +85,35 @@ export function setCloseRunHistoryStatus(status: DelaChatStatus) {
   )
 }
 
+export function readRunningTasks(): DelaChatHistoryEntry[] {
+  return readSessionEntries()
+    .filter((entry) => entry.status === 'Running')
+    .sort((a, b) => b.askedOn.getTime() - a.askedOn.getTime())
+}
+
+/** Records a close run as running, reusing the chat for the same period if one exists. */
+export function startCloseRun(title: string) {
+  const current = readSessionEntries()
+  const existing = current.find((entry) => entry.title === title)
+  const run: DelaChatHistoryEntry = {
+    id: existing?.id ?? `chat-run-${Date.now()}`,
+    title,
+    askedOn: new Date(),
+    status: 'Running',
+  }
+  sessionEntries = [run, ...current.filter((entry) => entry !== existing)]
+}
+
+export function setChatStatus(id: string, status: DelaChatStatus) {
+  sessionEntries = readSessionEntries().map((entry) =>
+    entry.id === id ? { ...entry, status } : entry
+  )
+}
+
+export function nextChatStatus(status: DelaChatStatus): DelaChatStatus {
+  return STATUS_ORDER[(STATUS_ORDER.indexOf(status) + 1) % STATUS_ORDER.length]
+}
+
 function daysBetween(askedOn: Date, today: Date) {
   const start = new Date(askedOn.getFullYear(), askedOn.getMonth(), askedOn.getDate())
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -96,7 +129,7 @@ function groupLabel(askedOn: Date, today: Date) {
   return 'Older'
 }
 
-function formatAskedOn(askedOn: Date) {
+export function formatAskedOn(askedOn: Date) {
   const date = askedOn.toLocaleDateString('en-US', {
     month: 'numeric',
     day: 'numeric',
@@ -109,25 +142,39 @@ function formatAskedOn(askedOn: Date) {
   return `${date} • ${time}`
 }
 
-export function DelaChatHistory({ onBack, onSelect }: DelaChatHistoryProps) {
+export function DelaChatHistory({
+  onBack,
+  onSelect,
+  excludeRunning = false,
+  onEntriesChange,
+}: DelaChatHistoryProps) {
   const [entries, setEntries] = useState<DelaChatHistoryEntry[]>(readSessionEntries)
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
 
-  const commitEntries = useCallback((next: DelaChatHistoryEntry[]) => {
-    sessionEntries = next
-    setEntries(next)
-  }, [])
+  const commitEntries = useCallback(
+    (next: DelaChatHistoryEntry[]) => {
+      sessionEntries = next
+      setEntries(next)
+      onEntriesChange?.()
+    },
+    [onEntriesChange]
+  )
+
+  const listed = useMemo(
+    () => (excludeRunning ? entries.filter((entry) => entry.status !== 'Running') : entries),
+    [entries, excludeRunning]
+  )
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const found = needle
-      ? entries.filter((entry) => entry.title.toLowerCase().includes(needle))
-      : entries
+      ? listed.filter((entry) => entry.title.toLowerCase().includes(needle))
+      : listed
     return [...found].sort((a, b) => b.askedOn.getTime() - a.askedOn.getTime())
-  }, [entries, query])
+  }, [listed, query])
 
   const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount - 1)
@@ -172,7 +219,7 @@ export function DelaChatHistory({ onBack, onSelect }: DelaChatHistoryProps) {
 
   const cycleStatus = (entry: DelaChatHistoryEntry) => {
     if (!entry.status) return
-    const next = STATUS_ORDER[(STATUS_ORDER.indexOf(entry.status) + 1) % STATUS_ORDER.length]
+    const next = nextChatStatus(entry.status)
     commitEntries(
       entries.map((candidate) =>
         candidate.id === entry.id ? { ...candidate, status: next } : candidate
@@ -298,7 +345,7 @@ export function DelaChatHistory({ onBack, onSelect }: DelaChatHistoryProps) {
 
         {matches.length === 0 && (
           <p className="dela-history__empty">
-            {entries.length === 0
+            {listed.length === 0
               ? 'Your chat history is empty.'
               : `No chats match “${query.trim()}”.`}
           </p>
@@ -310,8 +357,12 @@ export function DelaChatHistory({ onBack, onSelect }: DelaChatHistoryProps) {
           variant="outline"
           icon="trash"
           className="dela-history__clear"
-          disabled={entries.length === 0}
-          onClick={() => commitEntries([])}
+          disabled={listed.length === 0}
+          onClick={() =>
+            commitEntries(
+              excludeRunning ? entries.filter((entry) => entry.status === 'Running') : []
+            )
+          }
         >
           Clear chat history
         </Button>

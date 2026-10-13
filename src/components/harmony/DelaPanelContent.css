@@ -42,6 +42,43 @@
   background-color: transparent;
 }
 
+.dela-panel__running-tasks-action {
+  position: relative;
+}
+
+.dela-panel__running-tasks-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(35%, -25%);
+  pointer-events: none;
+}
+
+/* Inline link inside the close-run notification that opens Running Tasks */
+.dela-panel__running-tasks-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: var(--font-semibold);
+  color: var(--link-color);
+  vertical-align: bottom;
+  cursor: pointer;
+}
+
+.dela-panel__running-tasks-link:hover {
+  text-decoration: underline;
+}
+
+.dela-panel__running-tasks-link:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-04);
+}
+
 .dela-panel__greeting {
   width: 100%;
   margin: var(--space-4) 0 0;

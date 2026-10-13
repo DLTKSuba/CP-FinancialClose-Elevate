@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Icon } from './Icon'
+import { Alert } from './Alert'
 import { Button } from './Button'
 import { Dropdown } from './Dropdown'
-import { DelaChatHistory, setCloseRunHistoryStatus } from './DelaChatHistory'
-import type { DelaChatStatus } from './DelaChatHistory'
+import { NotificationBadge } from './NotificationBadge'
+import { DelaChatHistory, readRunningTasks, startCloseRun } from './DelaChatHistory'
+import type { DelaChatHistoryEntry, DelaChatStatus } from './DelaChatHistory'
+import { DelaRunningTasks } from './DelaRunningTasks'
 import './DelaPanelContent.css'
 
 interface DelaMessage {
@@ -19,6 +22,7 @@ type ClosePeriodPhase =
   | 'form'
   | 'checking-transactions'
   | 'transactions-found'
+  | 'starting-close-job'
   | 'close-job-started'
   | 'missing-default-job'
   | 'processing-automatically'
@@ -27,15 +31,15 @@ type ClosePeriodPhase =
   | 'cancelled'
 
 /** Message Dela shows under the "Running close job" header for each run state.
-   Statuses without an image fall back to the Harmony warning icon. */
+   Info renders as a Harmony notification; other statuses without an image fall back
+   to the Harmony warning icon. */
 const CLOSE_RUN_MESSAGE: Record<
   DelaChatStatus,
   { text: string; tone: 'info' | 'success' | 'warning'; image?: string }
 > = {
   Running: {
-    text: "Close is in progress — you'll be notified when it's complete.",
+    text: "Task running in background. You'll be notified when complete.",
     tone: 'info',
-    image: '/InfoFilled.png',
   },
   Complete: {
     text: 'Close period process successfully',
@@ -48,8 +52,30 @@ const CLOSE_RUN_MESSAGE: Record<
   },
 }
 
-function CloseRunStatusReply({ status }: { status: DelaChatStatus }) {
+function CloseRunStatusReply({
+  status,
+  onOpenRunningTasks,
+}: {
+  status: DelaChatStatus
+  onOpenRunningTasks: () => void
+}) {
   const message = CLOSE_RUN_MESSAGE[status]
+  if (message.tone === 'info') {
+    return (
+      <Alert variant="info" style="enhanced">
+        {message.text} Check{' '}
+        <button
+          type="button"
+          className="dela-panel__running-tasks-link"
+          onClick={onOpenRunningTasks}
+        >
+          <Icon name="arrow-path" size="xs" />
+          Running Tasks
+        </button>{' '}
+        for updates.
+      </Alert>
+    )
+  }
   return (
     <p className={`dela-panel__response dela-panel__response--${message.tone}`} role="status">
       {message.image ? (
@@ -213,6 +239,9 @@ export function DelaPanelContent({
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [runningTasksOpen, setRunningTasksOpen] = useState(false)
+  /** Bumped when the session task list changes so the running count re-reads it. */
+  const [, setTasksVersion] = useState(0)
   const [messages, setMessages] = useState<DelaMessage[]>([])
   const [startedOn, setStartedOn] = useState('')
   const [phase, setPhase] = useState<ClosePeriodPhase>('idle')
@@ -248,6 +277,29 @@ export function DelaPanelContent({
   const periodConfirmation = `Fiscal year ${calendarYear(fiscalYear)}, period ${period} (${
     MONTHS[Number(period) - 1]
   }) is selected for close.`
+  const runningTaskCount = readRunningTasks().length
+  const refreshTasks = useCallback(() => setTasksVersion((version) => version + 1), [])
+
+  const startCloseJob = () => {
+    setCloseRunStatus('Running')
+    startCloseRun(`Close period for ${fiscalYear} Period ${period}`)
+    refreshTasks()
+    setPhase('starting-close-job')
+  }
+
+  const openRunningTasks = () => {
+    setHistoryOpen(false)
+    setRunningTasksOpen(true)
+  }
+
+  /** History and Running Tasks both reopen a close run's finished conversation. */
+  const reopenCloseRun = (entry: DelaChatHistoryEntry) => {
+    if (!entry.status) return
+    setMessages([{ id: `dela-message-${entry.id}`, text: entry.title }])
+    setStartedOn(entry.askedOn.toLocaleDateString())
+    setCloseRunStatus(entry.status)
+    setPhase('close-job-started')
+  }
 
   /** Each scan just flashes long enough to read, so the demo keeps moving. */
   useEffect(() => {
@@ -264,6 +316,18 @@ export function DelaPanelContent({
     const timer = window.setTimeout(() => setPhase('transactions-found'), 600)
     return () => window.clearTimeout(timer)
   }, [phase])
+
+  useEffect(() => {
+    if (phase !== 'starting-close-job') return
+    const timer = window.setTimeout(
+      () =>
+        setPhase(
+          missingDefaultJob && !selectedCloseJob ? 'missing-default-job' : 'close-job-started'
+        ),
+      600
+    )
+    return () => window.clearTimeout(timer)
+  }, [missingDefaultJob, phase, selectedCloseJob])
 
   useEffect(() => {
     if (phase !== 'processing-automatically' || postingComplete) return
@@ -325,6 +389,7 @@ export function DelaPanelContent({
 
   const clearConversation = useCallback(() => {
     setHistoryOpen(false)
+    setRunningTasksOpen(false)
     setDraft('')
     setMessages([])
     setStartedOn('')
@@ -361,10 +426,32 @@ export function DelaPanelContent({
           disabled={missingDefaultJob}
           onClick={() => {
             if (missingDefaultJob) return
+            setRunningTasksOpen(false)
             setHistoryOpen((open) => !open)
           }}
         >
           <Icon name="clock" size="md" />
+        </button>
+        <button
+          type="button"
+          className="dela-panel__toolbar-action dela-panel__running-tasks-action"
+          aria-label={`Running tasks (${runningTaskCount})`}
+          title="Running tasks"
+          aria-pressed={runningTasksOpen}
+          onClick={() => {
+            setHistoryOpen(false)
+            setRunningTasksOpen((open) => !open)
+          }}
+        >
+          <Icon name="arrow-path" size="md" />
+          {runningTaskCount > 0 && (
+            <NotificationBadge
+              type="number"
+              size="sm"
+              value={runningTaskCount}
+              className="dela-panel__running-tasks-count"
+            />
+          )}
         </button>
         <button
           type="button"
@@ -384,17 +471,25 @@ export function DelaPanelContent({
         </button>
       </div>
 
-      {historyOpen && !missingDefaultJob ? (
+      {runningTasksOpen ? (
+        <DelaRunningTasks
+          onBack={() => setRunningTasksOpen(false)}
+          onTasksChange={refreshTasks}
+          onSelect={(entry) => {
+            setRunningTasksOpen(false)
+            reopenCloseRun(entry)
+          }}
+        />
+      ) : historyOpen && !missingDefaultJob ? (
         <DelaChatHistory
+          excludeRunning
+          onEntriesChange={refreshTasks}
           onBack={() => setHistoryOpen(false)}
           onSelect={(entry) => {
             setHistoryOpen(false)
             /* Close runs reopen their finished conversation; other chats just prefill. */
             if (entry.status) {
-              setMessages([{ id: `dela-message-${entry.id}`, text: entry.title }])
-              setStartedOn(entry.askedOn.toLocaleDateString())
-              setCloseRunStatus(entry.status)
-              setPhase('close-job-started')
+              reopenCloseRun(entry)
               return
             }
             setDraft(entry.title)
@@ -494,7 +589,9 @@ export function DelaPanelContent({
                     )}
 
                     {(phase === 'form' ||
+                      phase === 'checking-transactions' ||
                       phase === 'transactions-found' ||
+                      phase === 'starting-close-job' ||
                       phase === 'close-job-started' ||
                       phase === 'missing-default-job') && (
                       <>
@@ -529,7 +626,7 @@ export function DelaPanelContent({
                               type="button"
                               variant="primary"
                               size="sm"
-                              onClick={() => setPhase('transactions-found')}
+                              onClick={() => setPhase('checking-transactions')}
                             >
                               Continue
                             </Button>
@@ -546,11 +643,25 @@ export function DelaPanelContent({
                       </>
                     )}
 
-                    {periodConfirmed && phase !== 'transactions-found' && (
-                      <p className="dela-panel__period-confirm">{periodConfirmation}</p>
+                    {periodConfirmed &&
+                      phase !== 'checking-transactions' &&
+                      phase !== 'transactions-found' && (
+                        <p className="dela-panel__period-confirm">{periodConfirmation}</p>
+                      )}
+
+                    {phase === 'checking-transactions' && (
+                      <p
+                        className="dela-panel__readiness dela-panel__transaction-thinking"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <img src="/Stars.svg" alt="" />
+                        Checking for unposted transactions ...
+                      </p>
                     )}
 
                     {(phase === 'transactions-found' ||
+                      phase === 'starting-close-job' ||
                       phase === 'close-job-started' ||
                       phase === 'missing-default-job') && (
                       <section
@@ -564,8 +675,7 @@ export function DelaPanelContent({
                             className="dela-panel__transaction-dela-icon"
                           />
                           <h4 id="dela-unposted-transactions-title">
-                            There are unposted transactions, would you like to process it
-                            automatically or review manually?
+                            You have {UNPOSTED_TRANSACTION_TOTAL} unposted transactions
                           </h4>
                         </div>
                         {TRANSACTION_CARD}
@@ -576,12 +686,12 @@ export function DelaPanelContent({
                               variant="primary"
                               size="sm"
                               onClick={() => {
-                                setCloseRunStatus('Running')
-                                setCloseRunHistoryStatus('Running')
-                                if (missingDefaultJob) setSelectedCloseJob('')
-                                setPhase(
-                                  missingDefaultJob ? 'missing-default-job' : 'close-job-started'
-                                )
+                                if (missingDefaultJob) {
+                                  setSelectedCloseJob('')
+                                  setPhase('starting-close-job')
+                                  return
+                                }
+                                startCloseJob()
                               }}
                             >
                               Process automatically
@@ -597,6 +707,17 @@ export function DelaPanelContent({
                           </div>
                         )}
                       </section>
+                    )}
+
+                    {phase === 'starting-close-job' && (
+                      <p
+                        className="dela-panel__readiness dela-panel__transaction-thinking"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <img src="/Stars.svg" alt="" />
+                        Starting close job ...
+                      </p>
                     )}
 
                     {(phase === 'close-job-started' || phase === 'missing-default-job') && (
@@ -637,11 +758,7 @@ export function DelaPanelContent({
                                 variant="primary"
                                 size="sm"
                                 disabled={!selectedCloseJob}
-                                onClick={() => {
-                                  setCloseRunStatus('Running')
-                                  setCloseRunHistoryStatus('Running')
-                                  setPhase('close-job-started')
-                                }}
+                                onClick={startCloseJob}
                               >
                                 Continue
                               </Button>
@@ -656,7 +773,10 @@ export function DelaPanelContent({
                             </div>
                           </>
                         ) : (
-                          <CloseRunStatusReply status={closeRunStatus} />
+                          <CloseRunStatusReply
+                            status={closeRunStatus}
+                            onOpenRunningTasks={openRunningTasks}
+                          />
                         )}
                       </section>
                     )}

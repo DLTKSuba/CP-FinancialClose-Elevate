@@ -1,0 +1,20 @@
+/* Running Tasks view inside the Dela panel (opened from the arrow-path quick action) */
+
+.dela-running-tasks__spinner {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  color: var(--color-info);
+  animation: dela-running-tasks-spin 1.6s linear infinite;
+}
+
+@keyframes dela-running-tasks-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dela-running-tasks__spinner {
+    animation: none;
+  }
+}
