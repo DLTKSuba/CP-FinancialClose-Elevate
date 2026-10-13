@@ -23,7 +23,7 @@ export interface DelaRunningTasksProps {
 export function DelaRunningTasks({ onBack, onSelect, onTasksChange }: DelaRunningTasksProps) {
   const [tasks, setTasks] = useState<DelaChatHistoryEntry[]>(readRunningTasks)
 
-  /* Stepping a task off Running hands it back to Chat History. */
+  /* Stepping a task to Complete hands it back to Chat History. */
   const advanceStatus = (task: DelaChatHistoryEntry) => {
     if (!task.status) return
     setChatStatus(task.id, nextChatStatus(task.status))
@@ -50,11 +50,19 @@ export function DelaRunningTasks({ onBack, onSelect, onTasksChange }: DelaRunnin
           <section className="dela-history__group" aria-label="Tasks running in background">
             {tasks.map((task) => (
               <div key={task.id} className="dela-history__card">
-                <Icon
-                  name="arrow-path"
-                  size="sm"
-                  className="dela-running-tasks__spinner"
-                />
+                {task.status === 'Needs Review' ? (
+                  <Icon
+                    name="exclamation-triangle"
+                    size="sm"
+                    className="dela-running-tasks__review-icon"
+                  />
+                ) : (
+                  <Icon
+                    name="arrow-path"
+                    size="sm"
+                    className="dela-running-tasks__spinner"
+                  />
+                )}
                 <div className="dela-history__card-body">
                   {task.status && (
                     <button

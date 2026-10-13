@@ -7,6 +7,12 @@
   animation: dela-running-tasks-spin 1.6s linear infinite;
 }
 
+.dela-running-tasks__review-icon {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  color: var(--color-warning);
+}
+
 @keyframes dela-running-tasks-spin {
   to {
     transform: rotate(360deg);

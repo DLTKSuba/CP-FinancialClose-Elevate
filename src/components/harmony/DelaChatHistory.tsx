@@ -29,7 +29,7 @@ export interface DelaChatHistoryProps {
   onBack: () => void
   /** Called with the past prompt when a chat is reopened from the list. */
   onSelect?: (entry: DelaChatHistoryEntry) => void
-  /** Leaves running close runs out of the list; they live in Running Tasks instead. */
+  /** Leaves unfinished background tasks out of the list; they live in Running Tasks instead. */
   excludeRunning?: boolean
   /** Fires after any edit so callers can refresh counts derived from the session list. */
   onEntriesChange?: () => void
@@ -48,7 +48,13 @@ interface SeedEntry {
 
 /** Closing Manager prompts an accountant would realistically have asked Dela. */
 const SEED_ENTRIES: SeedEntry[] = [
-  { title: 'Close period for FY2026 Period 9', daysAgo: 0, hour: 7, minute: 17, status: 'Running' },
+  {
+    title: 'Generate financial statements for FY2026 Period 8',
+    daysAgo: 0,
+    hour: 7,
+    minute: 17,
+    status: 'Needs Review',
+  },
   { title: 'Which closing tasks are still waiting on dependencies?', daysAgo: 0, hour: 6, minute: 42 },
   { title: 'Show the unposted transactions blocking Period 9', daysAgo: 2, hour: 15, minute: 9 },
   { title: 'Summarize posting status by company for subperiod 9', daysAgo: 2, hour: 15, minute: 9 },
@@ -85,9 +91,14 @@ export function setCloseRunHistoryStatus(status: DelaChatStatus) {
   )
 }
 
+/** Background tasks that haven't finished: still running, or waiting on the user's review. */
+export function isBackgroundTask(entry: DelaChatHistoryEntry) {
+  return entry.status === 'Running' || entry.status === 'Needs Review'
+}
+
 export function readRunningTasks(): DelaChatHistoryEntry[] {
   return readSessionEntries()
-    .filter((entry) => entry.status === 'Running')
+    .filter(isBackgroundTask)
     .sort((a, b) => b.askedOn.getTime() - a.askedOn.getTime())
 }
 
@@ -164,7 +175,7 @@ export function DelaChatHistory({
   )
 
   const listed = useMemo(
-    () => (excludeRunning ? entries.filter((entry) => entry.status !== 'Running') : entries),
+    () => (excludeRunning ? entries.filter((entry) => !isBackgroundTask(entry)) : entries),
     [entries, excludeRunning]
   )
 
@@ -360,7 +371,7 @@ export function DelaChatHistory({
           disabled={listed.length === 0}
           onClick={() =>
             commitEntries(
-              excludeRunning ? entries.filter((entry) => entry.status === 'Running') : []
+              excludeRunning ? entries.filter(isBackgroundTask) : []
             )
           }
         >
