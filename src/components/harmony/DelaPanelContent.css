@@ -332,6 +332,21 @@
   border-radius: var(--radius-full);
 }
 
+.dela-panel__record-link {
+  white-space: nowrap;
+}
+
+.dela-panel__step-message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+
 .dela-panel__period-card {
   display: flex;
   align-items: center;

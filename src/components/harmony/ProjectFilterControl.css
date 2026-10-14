@@ -51,6 +51,11 @@
   white-space: nowrap;
 }
 
+.project-filter-control__funnel {
+  color: var(--theme-primary, #336699);
+  flex-shrink: 0;
+}
+
 .project-filter-control__chevron {
   color: #6b7280;
   flex-shrink: 0;

@@ -55,6 +55,8 @@ export interface ShellLayoutProps {
   rightShellPanelSlot?: ReactNode
   /** Panel body used only while a Dela AI rail item is active; falls back to rightShellPanelSlot. */
   rightShellPanelDelaSlot?: ReactNode
+  /** Each new non-zero value opens the right panel on the Dela AI rail item. */
+  rightShellPanelOpenDelaRequest?: number
   /**
    * 'viewport' (default) keeps the Harmony footer-aware bottom edge.
    * 'content' ends the right panel where the main content ends.
@@ -123,6 +125,7 @@ export function ShellLayout({
   rightShellPanelInitialTitleIcon = 'bell',
   rightShellPanelSlot,
   rightShellPanelDelaSlot,
+  rightShellPanelOpenDelaRequest = 0,
   rightShellPanelBottomAlign = 'viewport',
   rightSidebarAlign = 'center',
   rightSidebarTopAnchor,
@@ -155,6 +158,24 @@ export function ShellLayout({
     initialTitle: rightShellPanelInitialTitle,
     initialTitleIcon: rightShellPanelInitialTitleIcon,
   })
+
+  const { handleItemActivate: activateRightRailItem } = rightRailPanel
+  useEffect(() => {
+    if (!rightShellPanelOpenDelaRequest || !rightSidebarSections) return
+    for (const [sectionIndex, section] of rightSidebarSections.entries()) {
+      const itemIndex = section.items.findIndex(
+        (item) => (item.panelTitle ?? item.label) === 'Dela AI'
+      )
+      if (itemIndex === -1) continue
+      activateRightRailItem({
+        item: section.items[itemIndex],
+        sectionIndex,
+        itemIndex,
+        itemKey: `right-sidebar-item-${sectionIndex}-${itemIndex}`,
+      })
+      return
+    }
+  }, [rightShellPanelOpenDelaRequest, rightSidebarSections, activateRightRailItem])
 
   // The rail and panel are fixed to the viewport, so content edges have to be measured.
   useEffect(() => {

@@ -15,6 +15,8 @@ export interface LifecycleBarChartBar {
 
 export interface LifecycleBarChartProps {
   title: string
+  /** Right-aligned controls on the title row (e.g. project filter). */
+  headerActions?: ReactNode
   bars: LifecycleBarChartBar[]
   /** Top of Y-axis (e.g. 200); bars scale to this max */
   yAxisMax: number
@@ -34,6 +36,7 @@ export interface LifecycleBarChartProps {
 
 export function LifecycleBarChart({
   title,
+  headerActions,
   bars,
   yAxisMax,
   legendItems,
@@ -68,7 +71,12 @@ export function LifecycleBarChart({
       aria-label={summary}
     >
       <div className="lifecycle-bar-chart__header">
-        <h3 className="lifecycle-bar-chart__title">{title}</h3>
+        <div className="lifecycle-bar-chart__title-row">
+          <h3 className="lifecycle-bar-chart__title">{title}</h3>
+          {headerActions != null && (
+            <div className="lifecycle-bar-chart__header-actions">{headerActions}</div>
+          )}
+        </div>
         {onBarToggle != null && selectedBarsInChartOrder.length > 0 && (
           <div className="lifecycle-bar-chart__active-filters">
             <span className="lifecycle-bar-chart__active-filters-label" id={activeFiltersLabelId}>

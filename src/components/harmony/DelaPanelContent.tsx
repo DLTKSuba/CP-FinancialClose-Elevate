@@ -5,9 +5,22 @@ import { Alert } from './Alert'
 import { Button } from './Button'
 import { Dropdown } from './Dropdown'
 import { NotificationBadge } from './NotificationBadge'
-import { DelaChatHistory, readRunningTasks, startCloseRun } from './DelaChatHistory'
+import {
+  DelaChatHistory,
+  readTasksNeedingReview,
+  setChatStatus,
+  startCloseRun,
+} from './DelaChatHistory'
 import type { DelaChatHistoryEntry, DelaChatStatus } from './DelaChatHistory'
 import { DelaRunningTasks } from './DelaRunningTasks'
+import {
+  DelaVendorRecommendations,
+  TOP_VENDOR_RECOMMENDATIONS,
+  VENDOR_INSIGHT_STEPS,
+  poIdFor,
+  quoteIdFor,
+} from './DelaVendorRecommendations'
+import { Link } from './Link'
 import './DelaPanelContent.css'
 
 interface DelaMessage {
@@ -29,6 +42,8 @@ type ClosePeriodPhase =
   | 'reviewing-transactions'
   | 'running-closing-job'
   | 'cancelled'
+  | 'collecting-vendor-insights'
+  | 'vendors-ready'
 
 /** Message Dela shows under the "Running close job" header for each run state.
    Info renders as a Harmony notification; other statuses without an image fall back
@@ -50,6 +65,31 @@ const CLOSE_RUN_MESSAGE: Record<
     text: 'Close period needs review — some transactions require your attention.',
     tone: 'warning',
   },
+}
+
+/** Background RFQ tasks are titled `<prompt> · RFQ sent to <vendor>` so they can be reopened. */
+const RFQ_TASK_SEPARATOR = ' · RFQ sent to '
+
+const RFQ_SEND_STEPS = [
+  'Attaching requisition lines',
+  'Adding need-by dates and delivery terms',
+  'Emailing RFQ to vendor',
+]
+
+const PO_CREATE_STEPS = [
+  'Copying quote lines and pricing',
+  'Applying requisition charging',
+  'Saving purchase order',
+]
+
+type RfqStage = 'none' | 'sending' | 'awaiting-quote' | 'quote-received'
+
+type QuoteOutcome = 'creating-po' | 'po-created' | 'cancelled'
+
+const RFQ_STAGE_FOR_STATUS: Record<DelaChatStatus, RfqStage> = {
+  Running: 'awaiting-quote',
+  'Needs Review': 'quote-received',
+  Complete: 'quote-received',
 }
 
 function CloseRunStatusReply({
@@ -226,6 +266,9 @@ export interface DelaPanelContentProps {
   closeThroughDelaEnabled?: boolean
   /** When true, Continue on the period form asks the user to pick a close job. */
   missingDefaultJob?: boolean
+  /** Sent as the user's message from outside the panel (e.g. Create PO); a new `id` starts a new conversation. */
+  externalPrompt?: { id: number; text: string } | null
+  onExternalPromptConsumed?: () => void
 }
 
 export function DelaPanelContent({
@@ -235,6 +278,8 @@ export function DelaPanelContent({
   suggestedPrompt = 'Close period',
   closeThroughDelaEnabled = true,
   missingDefaultJob = false,
+  externalPrompt = null,
+  onExternalPromptConsumed,
 }: DelaPanelContentProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState('')
@@ -255,6 +300,17 @@ export function DelaPanelContent({
   /** Drives the close-job message; history chats reopen with their tag's state. */
   const [closeRunStatus, setCloseRunStatus] = useState<DelaChatStatus>('Running')
   const [selectedCloseJob, setSelectedCloseJob] = useState('')
+  const [vendorSteps, setVendorSteps] = useState(0)
+  const [vendorStepsOpen, setVendorStepsOpen] = useState(false)
+  const [rfqVendorName, setRfqVendorName] = useState<string | null>(null)
+  const [rfqStage, setRfqStage] = useState<RfqStage>('none')
+  const [rfqSendSteps, setRfqSendSteps] = useState(0)
+  const [rfqStepsOpen, setRfqStepsOpen] = useState(false)
+  const [rfqTaskId, setRfqTaskId] = useState<string | null>(null)
+  const [quoteOutcome, setQuoteOutcome] = useState<QuoteOutcome | null>(null)
+  const [poCreateSteps, setPoCreateSteps] = useState(0)
+  const quoteTurnRef = useRef<HTMLElement>(null)
+  const poResultRef = useRef<HTMLElement>(null)
 
   const hasConversation = messages.length > 0
   const canSend = draft.trim() !== ''
@@ -274,10 +330,20 @@ export function DelaPanelContent({
   const periodLocked = phase !== 'form'
   const postingComplete = postedSteps >= POSTING_STEPS.length
   const closingJobComplete = closingJobSteps >= CLOSING_JOB_STEPS.length
+  const vendorInsightsComplete = vendorSteps >= VENDOR_INSIGHT_STEPS.length
+  const isThinking =
+    phase === 'checking-readiness' ||
+    phase === 'collecting-vendor-insights' ||
+    (phase === 'vendors-ready' && (rfqStage === 'sending' || quoteOutcome === 'creating-po'))
+  const poPrompt = messages[0]?.text ?? ''
+  const requisitionId = poPrompt.match(/^Create PO for (\S+)/)?.[1]
+  const rfqVendorRank =
+    TOP_VENDOR_RECOMMENDATIONS.find((vendor) => vendor.name === rfqVendorName)?.rank ?? 1
+  const quoteId = quoteIdFor(requisitionId, rfqVendorRank)
   const periodConfirmation = `Fiscal year ${calendarYear(fiscalYear)}, period ${period} (${
     MONTHS[Number(period) - 1]
   }) is selected for close.`
-  const runningTaskCount = readRunningTasks().length
+  const reviewTaskCount = readTasksNeedingReview().length
   const refreshTasks = useCallback(() => setTasksVersion((version) => version + 1), [])
 
   const startCloseJob = () => {
@@ -292,11 +358,51 @@ export function DelaPanelContent({
     setRunningTasksOpen(true)
   }
 
+  const sendRfq = (vendorName: string) => {
+    setRfqVendorName(vendorName)
+    setRfqSendSteps(0)
+    setRfqStepsOpen(false)
+    setQuoteOutcome(null)
+    setRfqStage('sending')
+    setRfqTaskId(startCloseRun(`${poPrompt || 'Create PO'}${RFQ_TASK_SEPARATOR}${vendorName}`))
+    refreshTasks()
+  }
+
+  const completeRfqTask = useCallback(() => {
+    if (rfqTaskId != null) setChatStatus(rfqTaskId, 'Complete')
+    refreshTasks()
+  }, [rfqTaskId, refreshTasks])
+
+  const createPoFromQuote = () => {
+    setPoCreateSteps(0)
+    setQuoteOutcome('creating-po')
+  }
+
+  const cancelQuote = () => {
+    setQuoteOutcome('cancelled')
+    completeRfqTask()
+  }
+
   /** History and Running Tasks both reopen a close run's finished conversation. */
   const reopenCloseRun = (entry: DelaChatHistoryEntry) => {
     if (!entry.status) return
-    setMessages([{ id: `dela-message-${entry.id}`, text: entry.title }])
     setStartedOn(entry.askedOn.toLocaleDateString())
+    const [rfqPrompt, rfqVendor] = entry.title.split(RFQ_TASK_SEPARATOR)
+    if (rfqVendor != null) {
+      setMessages([{ id: `dela-message-${entry.id}`, text: rfqPrompt }])
+      setVendorSteps(VENDOR_INSIGHT_STEPS.length)
+      setVendorStepsOpen(false)
+      setRfqVendorName(rfqVendor)
+      setRfqSendSteps(RFQ_SEND_STEPS.length)
+      setRfqStepsOpen(false)
+      setRfqTaskId(entry.id)
+      setQuoteOutcome(entry.status === 'Complete' ? 'po-created' : null)
+      setPoCreateSteps(PO_CREATE_STEPS.length)
+      setRfqStage(RFQ_STAGE_FOR_STATUS[entry.status])
+      setPhase('vendors-ready')
+      return
+    }
+    setMessages([{ id: `dela-message-${entry.id}`, text: entry.title }])
     setCloseRunStatus(entry.status)
     setPhase('close-job-started')
   }
@@ -345,6 +451,63 @@ export function DelaPanelContent({
     const timer = window.setTimeout(() => setClosingJobSteps((done) => done + 1), 600)
     return () => window.clearTimeout(timer)
   }, [phase, closingJobSteps, closingJobComplete])
+
+  useEffect(() => {
+    if (phase !== 'collecting-vendor-insights') return
+    if (vendorInsightsComplete) {
+      setPhase('vendors-ready')
+      return
+    }
+    const timer = window.setTimeout(() => setVendorSteps((done) => done + 1), 900)
+    return () => window.clearTimeout(timer)
+  }, [phase, vendorSteps, vendorInsightsComplete])
+
+  useEffect(() => {
+    if (rfqStage !== 'sending') return
+    if (rfqSendSteps >= RFQ_SEND_STEPS.length) {
+      setRfqStage('awaiting-quote')
+      return
+    }
+    const timer = window.setTimeout(() => setRfqSendSteps((done) => done + 1), 700)
+    return () => window.clearTimeout(timer)
+  }, [rfqStage, rfqSendSteps])
+
+  useEffect(() => {
+    if (quoteOutcome !== 'creating-po') return
+    if (poCreateSteps >= PO_CREATE_STEPS.length) {
+      setQuoteOutcome('po-created')
+      completeRfqTask()
+      return
+    }
+    const timer = window.setTimeout(() => setPoCreateSteps((done) => done + 1), 650)
+    return () => window.clearTimeout(timer)
+  }, [quoteOutcome, poCreateSteps, completeRfqTask])
+
+  useEffect(() => {
+    if (rfqStage !== 'quote-received' || runningTasksOpen || historyOpen) return
+    const latestTurn = quoteOutcome === 'po-created' ? poResultRef.current : quoteTurnRef.current
+    latestTurn?.scrollIntoView({ block: 'end' })
+  }, [rfqStage, quoteOutcome, runningTasksOpen, historyOpen])
+
+  const externalPromptId = externalPrompt?.id
+  useEffect(() => {
+    if (externalPrompt == null) return
+    setHistoryOpen(false)
+    setRunningTasksOpen(false)
+    setDraft('')
+    setMessages([{ id: `dela-message-${externalPrompt.id}`, text: externalPrompt.text }])
+    setStartedOn(new Date().toLocaleDateString())
+    setVendorSteps(0)
+    setVendorStepsOpen(false)
+    setRfqVendorName(null)
+    setRfqStage('none')
+    setRfqSendSteps(0)
+    setRfqTaskId(null)
+    setQuoteOutcome(null)
+    setPhase('collecting-vendor-insights')
+    onExternalPromptConsumed?.()
+    // Only a new prompt id restarts the flow.
+  }, [externalPromptId])
 
   const sendDraft = useCallback(() => {
     const text = draft.trim()
@@ -403,6 +566,13 @@ export function DelaPanelContent({
     setClosingJobSteps(0)
     setClosingJobOpen(false)
     setSelectedCloseJob('')
+    setVendorSteps(0)
+    setVendorStepsOpen(false)
+    setRfqVendorName(null)
+    setRfqStage('none')
+    setRfqSendSteps(0)
+    setRfqTaskId(null)
+    setQuoteOutcome(null)
   }, [])
 
   return (
@@ -435,7 +605,7 @@ export function DelaPanelContent({
         <button
           type="button"
           className="dela-panel__toolbar-action dela-panel__running-tasks-action"
-          aria-label={`Running tasks (${runningTaskCount})`}
+          aria-label={`Running tasks (${reviewTaskCount} need review)`}
           title="Running tasks"
           aria-pressed={runningTasksOpen}
           onClick={() => {
@@ -444,11 +614,11 @@ export function DelaPanelContent({
           }}
         >
           <Icon name="arrow-path" size="md" />
-          {runningTaskCount > 0 && (
+          {reviewTaskCount > 0 && (
             <NotificationBadge
               type="number"
               size="sm"
-              value={runningTaskCount}
+              value={reviewTaskCount}
               className="dela-panel__running-tasks-count"
             />
           )}
@@ -553,7 +723,7 @@ export function DelaPanelContent({
                     onClick={clearConversation}
                   >
                     {/* Sparkles while Dela works; the colour mark lands with the result */}
-                    {phase === 'checking-readiness' ? (
+                    {isThinking ? (
                       <img
                         src="/Stars.svg"
                         alt=""
@@ -910,6 +1080,192 @@ export function DelaPanelContent({
                           </div>
                         )}
                       </section>
+                    )}
+
+                    {phase === 'collecting-vendor-insights' && (
+                      <section className="dela-panel__posting">
+                        <p
+                          className="dela-panel__readiness dela-panel__posting-heading"
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <img src="/Stars.svg" alt="" className="dela-panel__posting-sparkle" />
+                          Collecting vendor insights ...
+                        </p>
+                        <p className="dela-panel__response">
+                          Vendor insights are needed to create this PO. I&apos;ll share the top
+                          vendors shortly.
+                        </p>
+                        <WorkflowChecklist steps={VENDOR_INSIGHT_STEPS} doneCount={vendorSteps} />
+                      </section>
+                    )}
+
+                    {phase === 'vendors-ready' && (
+                      <>
+                        <section className="dela-panel__step">
+                          <div className="dela-panel__step-row">
+                            <img src="/RS_Dela_Active.svg" alt="" />
+                            <button
+                              type="button"
+                              className="dela-panel__readiness-summary"
+                              aria-expanded={vendorStepsOpen}
+                              aria-controls="dela-vendor-insight-detail"
+                              onClick={() => setVendorStepsOpen((open) => !open)}
+                            >
+                              <Icon name="check" size="sm" className="dela-panel__check-icon" />
+                              <span className="dela-panel__readiness-summary-text">
+                                Vendor insights collected · 3 vendors ranked
+                              </span>
+                              <Icon
+                                name={vendorStepsOpen ? 'chevron-up' : 'chevron-down'}
+                                size="sm"
+                              />
+                            </button>
+                          </div>
+                          {vendorStepsOpen && (
+                            <div id="dela-vendor-insight-detail">
+                              <WorkflowChecklist
+                                steps={VENDOR_INSIGHT_STEPS}
+                                doneCount={VENDOR_INSIGHT_STEPS.length}
+                              />
+                            </div>
+                          )}
+                        </section>
+                        <DelaVendorRecommendations
+                          requisitionId={requisitionId}
+                          rfqSentTo={rfqVendorName}
+                          onSendRfq={(vendor) => sendRfq(vendor.name)}
+                        />
+                        {rfqStage === 'sending' && (
+                          <section className="dela-panel__posting">
+                            <p
+                              className="dela-panel__readiness dela-panel__posting-heading"
+                              role="status"
+                              aria-live="polite"
+                            >
+                              <img src="/Stars.svg" alt="" className="dela-panel__posting-sparkle" />
+                              Sending RFQ to {rfqVendorName} ...
+                            </p>
+                            <WorkflowChecklist steps={RFQ_SEND_STEPS} doneCount={rfqSendSteps} />
+                          </section>
+                        )}
+                        {(rfqStage === 'awaiting-quote' || rfqStage === 'quote-received') && (
+                          <section className="dela-panel__step">
+                            <div className="dela-panel__step-row">
+                              <img src="/RS_Dela_Active.svg" alt="" />
+                              <button
+                                type="button"
+                                className="dela-panel__readiness-summary"
+                                aria-expanded={rfqStepsOpen}
+                                aria-controls="dela-rfq-send-detail"
+                                onClick={() => setRfqStepsOpen((open) => !open)}
+                              >
+                                <Icon name="check" size="sm" className="dela-panel__check-icon" />
+                                <span className="dela-panel__readiness-summary-text">
+                                  RFQ sent, waiting for a quote
+                                </span>
+                                <Icon
+                                  name={rfqStepsOpen ? 'chevron-up' : 'chevron-down'}
+                                  size="sm"
+                                />
+                              </button>
+                            </div>
+                            {rfqStepsOpen && (
+                              <div id="dela-rfq-send-detail">
+                                <WorkflowChecklist
+                                  steps={RFQ_SEND_STEPS}
+                                  doneCount={RFQ_SEND_STEPS.length}
+                                />
+                              </div>
+                            )}
+                            <Alert variant="info" style="enhanced">
+                              The RFQ to {rfqVendorName} is in progress. You&apos;ll be notified
+                              when their quote is received. This task is running in the
+                              background. Check{' '}
+                              <button
+                                type="button"
+                                className="dela-panel__running-tasks-link"
+                                onClick={openRunningTasks}
+                              >
+                                <Icon name="arrow-path" size="xs" />
+                                Running Tasks
+                              </button>{' '}
+                              for updates.
+                            </Alert>
+                          </section>
+                        )}
+                        {rfqStage === 'quote-received' && (
+                          <section className="dela-panel__step" ref={quoteTurnRef}>
+                            <div className="dela-panel__step-row">
+                              <img src="/RS_Dela_Active.svg" alt="" />
+                              <p className="dela-panel__step-message" role="status">
+                                {rfqVendorName} responded. Quote{' '}
+                                <Link href="#" onClick={(event) => event.preventDefault()}>
+                                  {quoteId}
+                                </Link>{' '}
+                                was generated.
+                              </p>
+                            </div>
+                            {quoteOutcome == null && (
+                              <div className="dela-panel__turn-actions">
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={createPoFromQuote}
+                                >
+                                  Create PO
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={cancelQuote}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                            {quoteOutcome === 'cancelled' && (
+                              <p className="dela-panel__response" role="status">
+                                PO creation cancelled.
+                              </p>
+                            )}
+                          </section>
+                        )}
+                        {quoteOutcome === 'creating-po' && (
+                          <section className="dela-panel__posting">
+                            <p
+                              className="dela-panel__readiness dela-panel__posting-heading"
+                              role="status"
+                              aria-live="polite"
+                            >
+                              <img src="/Stars.svg" alt="" className="dela-panel__posting-sparkle" />
+                              Creating PO from quote {quoteId} ...
+                            </p>
+                            <WorkflowChecklist steps={PO_CREATE_STEPS} doneCount={poCreateSteps} />
+                          </section>
+                        )}
+                        {quoteOutcome === 'po-created' && (
+                          <section className="dela-panel__step" ref={poResultRef}>
+                            <div className="dela-panel__step-row">
+                              <img src="/RS_Dela_Active.svg" alt="" />
+                              <p className="dela-panel__step-message" role="status">
+                                {requisitionId != null
+                                  ? `PO for Req ${requisitionId} is successfully created.`
+                                  : 'PO is successfully created.'}{' '}
+                                <Link
+                                  href="#"
+                                  className="dela-panel__record-link"
+                                  onClick={(event) => event.preventDefault()}
+                                >
+                                  View PO {poIdFor(requisitionId)}
+                                </Link>
+                              </p>
+                            </div>
+                          </section>
+                        )}
+                      </>
                     )}
 
                     {phase === 'reviewing-transactions' && (

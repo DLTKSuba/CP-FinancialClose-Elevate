@@ -175,6 +175,7 @@ export function ProjectFilterControl({
         aria-controls={open ? `${baseId}-panel` : undefined}
         onClick={() => setOpen((o) => !o)}
       >
+        <Icon name="funnel" size="sm" className="project-filter-control__funnel" />
         <span className="project-filter-control__trigger-value">{triggerLabel}</span>
         <Icon name="chevron-down" size="sm" className="project-filter-control__chevron" />
       </button>

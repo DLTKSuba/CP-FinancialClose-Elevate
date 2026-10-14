@@ -17,7 +17,7 @@ export interface DelaChatHistoryEntry {
   status?: DelaChatStatus
 }
 
-const STATUS_ORDER: DelaChatStatus[] = ['Running', 'Complete', 'Needs Review']
+const STATUS_ORDER: DelaChatStatus[] = ['Running', 'Needs Review', 'Complete']
 
 export const CLOSE_RUN_BADGE_VARIANT: Record<DelaChatStatus, 'info' | 'success' | 'warning'> = {
   Running: 'info',
@@ -102,8 +102,13 @@ export function readRunningTasks(): DelaChatHistoryEntry[] {
     .sort((a, b) => b.askedOn.getTime() - a.askedOn.getTime())
 }
 
+/** Tasks waiting on the user; the only ones the notification count reports. */
+export function readTasksNeedingReview(): DelaChatHistoryEntry[] {
+  return readRunningTasks().filter((entry) => entry.status === 'Needs Review')
+}
+
 /** Records a close run as running, reusing the chat for the same period if one exists. */
-export function startCloseRun(title: string) {
+export function startCloseRun(title: string): string {
   const current = readSessionEntries()
   const existing = current.find((entry) => entry.title === title)
   const run: DelaChatHistoryEntry = {
@@ -113,6 +118,7 @@ export function startCloseRun(title: string) {
     status: 'Running',
   }
   sessionEntries = [run, ...current.filter((entry) => entry !== existing)]
+  return run.id
 }
 
 export function setChatStatus(id: string, status: DelaChatStatus) {

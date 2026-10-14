@@ -244,6 +244,97 @@
   overflow-x: auto;
 }
 
+/* Requisition row AI actions: primary Create PO + overflow menu */
+.command-center-row-actions-cell {
+  width: 1%;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Hovering the row's actions keeps the row at its resting stripe color */
+.command-center-data-table tbody tr:nth-child(odd):not(.table-row--selected):has(.command-center-row-actions-cell:hover) {
+  background-color: var(--surface-bg) !important;
+}
+
+.command-center-data-table tbody tr:nth-child(even):not(.table-row--selected):has(.command-center-row-actions-cell:hover) {
+  background-color: var(--card-bg) !important;
+}
+
+/* Split dropdown button: primary action + chevron segment sharing one pill */
+.command-center-row-actions {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.command-center-row-actions .btn {
+  gap: var(--space-1-5);
+}
+
+.command-center-row-actions__primary.btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.command-center-row-actions__toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  justify-content: center;
+  width: var(--button-height-xs);
+  height: var(--button-height-xs);
+  padding: 0;
+  border: none;
+  border-left: var(--border-width-thin) solid rgba(255, 255, 255, 0.45);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background-color: var(--theme-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+}
+
+.command-center-row-actions__toggle svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.command-center-row-actions__toggle:hover,
+.command-center-row-actions__toggle[aria-expanded='true'] {
+  background-color: var(--theme-primary-hover);
+}
+
+.command-center-row-actions__toggle:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+.command-center-ai-sparkle {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Sparkle reads white on the filled primary button */
+.command-center-row-actions__primary .command-center-ai-sparkle {
+  filter: brightness(0) invert(1);
+}
+
+/* Fixed so the table's scroll container cannot clip it */
+.command-center-row-actions__menu-layer {
+  position: fixed;
+  z-index: 50;
+  min-width: 11rem;
+  border: var(--border-width-thin) solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-bg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.command-center-row-actions__menu-layer .list-menu__custom-icon {
+  width: 16px;
+  height: 16px;
+}
+
 /* Requisition detail column (non-modal companion pane) — wider for single-line summary rows */
 .command-center-requisition-panel {
   position: relative;

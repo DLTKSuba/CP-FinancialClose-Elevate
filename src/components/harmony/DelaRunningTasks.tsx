@@ -23,9 +23,13 @@ export interface DelaRunningTasksProps {
 export function DelaRunningTasks({ onBack, onSelect, onTasksChange }: DelaRunningTasksProps) {
   const [tasks, setTasks] = useState<DelaChatHistoryEntry[]>(readRunningTasks)
 
-  /* Stepping a task to Complete hands it back to Chat History. */
-  const advanceStatus = (task: DelaChatHistoryEntry) => {
+  /* Running steps to Needs Review in place; a task that needs review opens its conversation. */
+  const handleStatusClick = (task: DelaChatHistoryEntry) => {
     if (!task.status) return
+    if (task.status === 'Needs Review') {
+      onSelect?.(task)
+      return
+    }
     setChatStatus(task.id, nextChatStatus(task.status))
     setTasks(readRunningTasks())
     onTasksChange?.()
@@ -68,8 +72,12 @@ export function DelaRunningTasks({ onBack, onSelect, onTasksChange }: DelaRunnin
                     <button
                       type="button"
                       className="dela-history__status"
-                      aria-label={`Task status: ${task.status}. Tap to change.`}
-                      onClick={() => advanceStatus(task)}
+                      aria-label={
+                        task.status === 'Needs Review'
+                          ? `Task status: ${task.status}. Tap to review.`
+                          : `Task status: ${task.status}. Tap to change.`
+                      }
+                      onClick={() => handleStatusClick(task)}
                     >
                       <Badge variant={CLOSE_RUN_BADGE_VARIANT[task.status]} size="medium">
                         {task.status}

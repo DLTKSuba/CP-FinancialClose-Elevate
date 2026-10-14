@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { Routes, Route } from 'react-router-dom'
@@ -8,14 +8,18 @@ import type { RightSidebarSection } from './components/harmony/RightSidebar'
 import { Card } from './components/harmony/Card'
 import { Button } from './components/harmony/Button'
 import { TabStrip } from './components/harmony/TabStrip'
-import { Table, type SortColumn } from './components/harmony/Table'
-import { Dropdown, type Option } from './components/harmony/Dropdown'
+import { Table } from './components/harmony/Table'
 import { LifecycleBarChart } from './components/harmony/LifecycleBarChart'
 import type { LifecycleBarChartBar } from './components/harmony/LifecycleBarChart'
 import { Link } from './components/harmony/Link'
+import { ListMenu } from './components/harmony/ListMenu'
+import {
+  ProjectFilterControl,
+  DEFAULT_LIFECYCLE_PROJECTS,
+} from './components/harmony/ProjectFilterControl'
 import { Icon } from './components/harmony/Icon'
 import { DelaPanelContent } from './components/harmony/DelaPanelContent'
-import { DelaPanelContentV2 } from './components/harmony/DelaPanelContentV2'
+import type { LeftSidebarSection } from './components/harmony/LeftSidebar'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { ComponentDemoPage } from './pages/ComponentDemoPage'
 import { RightSidebarPanelDemosPage } from './pages/RightSidebarPanelDemosPage'
@@ -23,15 +27,31 @@ import { RightSidebarPanelDemosPage } from './pages/RightSidebarPanelDemosPage'
 /** Default product theme for the designer preview (change via document.documentElement.classList if needed). */
 const DEFAULT_THEME = 'theme-cp'
 
-const PROTOTYPE_VERSION_OPTIONS: Option[] = [
-  { value: 'v1', label: 'V1' },
-  { value: 'v2', label: 'Version 2' },
-]
-
-const USE_CASE_SCENARIO_OPTIONS: Option[] = [
-  { value: 'end-to-end', label: 'End-End experience' },
-  { value: 'dela-not-enabled', label: 'Close thr Dela is not Enabled' },
-  { value: 'missing-default-job', label: 'Missing default job' },
+/** Costpoint left rail: favorites group, then module group (Command Center active). */
+const COSTPOINT_LEFT_RAIL: LeftSidebarSection[] = [
+  {
+    items: [
+      { icon: 'home', label: 'Home' },
+      { icon: 'squares-plus', label: 'Applications' },
+      { icon: 'star', label: 'Favorites' },
+      { icon: 'view-columns', label: 'Dashboards' },
+    ],
+  },
+  {
+    items: [
+      { icon: 'magnifying-glass', label: 'Search' },
+      { icon: 'rectangle-group', label: 'Command Center', active: true },
+      { icon: 'calculator', label: 'Accounting' },
+      { icon: 'related', label: 'Related' },
+      { icon: 'chart-bar', label: 'Analytics' },
+      { icon: 'building-office', label: 'Organizations' },
+      { icon: 'cube', label: 'Materials' },
+      { icon: 'clock', label: 'Time' },
+      { icon: 'users', label: 'People' },
+      { icon: 'document-chart-bar', label: 'Reports' },
+      { icon: 'cog-6-tooth', label: 'Settings' },
+    ],
+  },
 ]
 
 /**
@@ -41,7 +61,7 @@ const USE_CASE_SCENARIO_OPTIONS: Option[] = [
  */
 const THEME_SHELL_PROPS: Record<string, Partial<ShellLayoutProps>> = {
   'theme-cp': {
-    productName: 'Agentic Close',
+    productName: 'Costpoint',
     logoSrc: '/logos/CPVPLogo.svg',
     showFooter: false,
     showFloatingNav: true,
@@ -101,420 +121,13 @@ const COMMAND_CENTER_RIGHT_RAIL: RightSidebarSection[] = [
   },
 ]
 
-/** Command Center primary tabs (Closing Manager reference UI). */
-const CC_MAIN_TAB_IDS = ['general-ledger', 'financial-review', 'closing-manager'] as const
-
-const CLOSING_ROLE_OPTIONS: Option[] = [
-  { value: 'accountant', label: 'Accountant' },
-  { value: 'reviewer', label: 'Reviewer' },
-]
-
-const CLOSING_USER_FILTER_ALL = '__all__'
-const CLOSING_CURRENT_USER_ID = 'joe'
-const CLOSING_ASSIGNEE_MAX = 100
-
-const CLOSING_ASSIGNEE_FIRST_NAMES = [
-  'Alice',
-  'Bob',
-  'Carol',
-  'David',
-  'Emma',
-  'Frank',
-  'Grace',
-  'Henry',
-  'Ivy',
-  'James',
-  'Karen',
-  'Leo',
-  'Maria',
-  'Nina',
-  'Omar',
-  'Paula',
-  'Quinn',
-  'Rita',
-  'Sam',
-  'Tina',
-  'Uma',
-  'Victor',
-  'Wendy',
-  'Xavier',
-  'Yuki',
-  'Zoe',
+/** Command Center primary tabs (Buyer persona: Requisitions + Purchase Orders). */
+const CC_MAIN_TABS = [
+  { id: 'requisitions', label: 'Requisitions' },
+  { id: 'purchase-orders', label: 'Purchase Orders' },
 ] as const
 
-const CLOSING_ASSIGNEE_LAST_NAMES = [
-  'Adams',
-  'Baker',
-  'Chen',
-  'Davis',
-  'Evans',
-  'Foster',
-  'Garcia',
-  'Hill',
-  'Ivanov',
-  'Johnson',
-  'Kim',
-  'Lee',
-  'Martinez',
-  'Nguyen',
-  'Olsen',
-  'Patel',
-  'Quinn',
-  'Rivera',
-  'Smith',
-  'Taylor',
-  'Upton',
-  'Vargas',
-  'White',
-  'Young',
-  'Zhang',
-] as const
-
-/** Demo assignees for the Closing Manager user filter (max 100, Joe Smith is current user). */
-function buildClosingAssigneeOptions(maxPeople = CLOSING_ASSIGNEE_MAX): Option[] {
-  const options: Option[] = [
-    { value: CLOSING_CURRENT_USER_ID, label: 'Joe Smith' },
-    { value: 'jane', label: 'Jane Doe' },
-    { value: 'alice', label: 'Alice Chen' },
-    { value: 'bob', label: 'Bob Martinez' },
-  ]
-  const seenLabels = new Set(options.map((o) => o.label))
-  let seq = 0
-
-  while (options.length < maxPeople) {
-    const first = CLOSING_ASSIGNEE_FIRST_NAMES[seq % CLOSING_ASSIGNEE_FIRST_NAMES.length]
-    const last =
-      CLOSING_ASSIGNEE_LAST_NAMES[
-        Math.floor(seq / CLOSING_ASSIGNEE_FIRST_NAMES.length) % CLOSING_ASSIGNEE_LAST_NAMES.length
-      ]
-    const label = `${first} ${last}`
-    seq += 1
-    if (seenLabels.has(label)) continue
-    seenLabels.add(label)
-    options.push({ value: `assignee-${seq}`, label })
-  }
-
-  return options
-}
-
-const BASE_CLOSING_ASSIGNEE_OPTIONS: Option[] = buildClosingAssigneeOptions()
-
-const CLOSING_PROGRESS_BAR_TEMPLATE: Omit<LifecycleBarChartBar, 'value'>[] = [
-  {
-    id: 'not-started',
-    label: 'Not Started',
-    color: '#94a3b8',
-    description: 'Tasks not yet started',
-  },
-  {
-    id: 'ready',
-    label: 'Ready',
-    color: '#22c55e',
-    description: 'Tasks ready to run',
-  },
-  {
-    id: 'in-process',
-    label: 'In-Process',
-    color: '#eab308',
-    description: 'Tasks in progress',
-  },
-  {
-    id: 'waiting',
-    label: 'Waiting',
-    color: '#ef4444',
-    description: 'Tasks waiting on dependencies',
-  },
-]
-
-const CLOSING_PLAN_SORT_COLUMNS_BASE: SortColumn[] = [
-  { key: 'category', label: 'Category' },
-  { key: 'task', label: 'Task' },
-  { key: 'application', label: 'Application Name' },
-  { key: 'closingDay', label: 'Closing Day' },
-  { key: 'status', label: 'Status' },
-]
-
-const CLOSING_PLAN_SORT_COLUMNS_WITH_USER: SortColumn[] = [
-  { key: 'category', label: 'Category' },
-  { key: 'task', label: 'Task' },
-  { key: 'application', label: 'Application Name' },
-  { key: 'user', label: 'User' },
-  { key: 'closingDay', label: 'Closing Day' },
-  { key: 'status', label: 'Status' },
-]
-
-type ClosingTaskStatus = 'waiting' | 'in-process' | 'ready'
-
-type ClosingPlanTaskRow = {
-  id: string
-  category: string
-  task: string
-  applicationName: string | null
-  applicationHref?: string
-  closingDay: string
-  status: ClosingTaskStatus
-  /** Assignee for Command Center user filter demo. */
-  assigneeId: string
-  /** Display name for User column when multiple / all assignees are in scope. */
-  assigneeName: string
-}
-
-/** Shown when a single assignee is selected (narrow view). */
-const CLOSING_PLAN_TASK_ROWS_BASE: ClosingPlanTaskRow[] = [
-  {
-    id: '1',
-    category: 'Financial Analysis',
-    task: 'Add PL Table with metrics and drills',
-    applicationName: null,
-    closingDay: 'Day 1',
-    status: 'waiting',
-    assigneeId: 'joe',
-    assigneeName: 'Joe Smith (You)',
-  },
-  {
-    id: '2',
-    category: 'Financial Analysis',
-    task: 'Budgets for Fin Metrics',
-    applicationName: null,
-    closingDay: 'Day 2',
-    status: 'in-process',
-    assigneeId: 'jane',
-    assigneeName: 'Jane Doe',
-  },
-  {
-    id: '3',
-    category: 'Financial Analysis',
-    task: 'Finalize Journal Entries',
-    applicationName: 'Manage Journal Entries',
-    applicationHref: '#',
-    closingDay: 'Day 1',
-    status: 'ready',
-    assigneeId: 'alice',
-    assigneeName: 'Alice Chen',
-  },
-]
-
-/** Extra tasks when “All users” or multiple assignees are selected (broader plan view). */
-const CLOSING_PLAN_TASK_ROWS_EXTENDED: ClosingPlanTaskRow[] = [
-  {
-    id: '4',
-    category: 'Period Close',
-    task: 'Validate subledger tie-outs',
-    applicationName: 'Subledger Control',
-    applicationHref: '#',
-    closingDay: 'Day 1',
-    status: 'in-process',
-    assigneeId: 'joe',
-    assigneeName: 'Joe Smith (You)',
-  },
-  {
-    id: '5',
-    category: 'Period Close',
-    task: 'Run allocation sets',
-    applicationName: null,
-    closingDay: 'Day 2',
-    status: 'waiting',
-    assigneeId: 'jane',
-    assigneeName: 'Jane Doe',
-  },
-  {
-    id: '6',
-    category: 'Reporting',
-    task: 'Publish management flash',
-    applicationName: 'FR Studio',
-    applicationHref: '#',
-    closingDay: 'Day 2',
-    status: 'ready',
-    assigneeId: 'alice',
-    assigneeName: 'Alice Chen',
-  },
-  {
-    id: '7',
-    category: 'Reporting',
-    task: 'Reconcile intercompany eliminations',
-    applicationName: null,
-    closingDay: 'Day 3',
-    status: 'waiting',
-    assigneeId: 'bob',
-    assigneeName: 'Bob Martinez',
-  },
-  {
-    id: '8',
-    category: 'Compliance',
-    task: 'SOX control sign-off package',
-    applicationName: 'GRC Workspace',
-    applicationHref: '#',
-    closingDay: 'Day 3',
-    status: 'in-process',
-    assigneeId: 'joe',
-    assigneeName: 'Joe Smith (You)',
-  },
-  {
-    id: '9',
-    category: 'Compliance',
-    task: 'Document variance thresholds',
-    applicationName: null,
-    closingDay: 'Day 4',
-    status: 'ready',
-    assigneeId: 'bob',
-    assigneeName: 'Bob Martinez',
-  },
-  {
-    id: '10',
-    category: 'Cash',
-    task: 'Bank reconciliation sweep',
-    applicationName: 'Cash Management',
-    applicationHref: '#',
-    closingDay: 'Day 1',
-    status: 'ready',
-    assigneeId: 'alice',
-    assigneeName: 'Alice Chen',
-  },
-  {
-    id: '11',
-    category: 'Cash',
-    task: 'Confirm wire cutoff times',
-    applicationName: null,
-    closingDay: 'Day 2',
-    status: 'waiting',
-    assigneeId: 'jane',
-    assigneeName: 'Jane Doe',
-  },
-]
-
-function closingTaskStatusBadge(status: ClosingTaskStatus) {
-  const map: Record<
-    ClosingTaskStatus,
-    { label: string; className: string }
-  > = {
-    waiting: { label: 'Waiting', className: 'closing-task-status closing-task-status--waiting' },
-    'in-process': {
-      label: 'In Process',
-      className: 'closing-task-status closing-task-status--in-process',
-    },
-    ready: { label: 'Ready', className: 'closing-task-status closing-task-status--ready' },
-  }
-  const { label, className } = map[status]
-  return <span className={className}>{label}</span>
-}
-
-function closingPlanShowUserColumn(userFilters: string[]): boolean {
-  const allSelected =
-    userFilters.length === 1 && userFilters[0] === CLOSING_USER_FILTER_ALL
-  const selectedIds = userFilters.filter((id) => id !== CLOSING_USER_FILTER_ALL)
-  return allSelected || selectedIds.length > 1
-}
-
-function closingPlanTaskPool(userFilters: string[]): ClosingPlanTaskRow[] {
-  const expanded = closingPlanShowUserColumn(userFilters)
-  return expanded
-    ? [...CLOSING_PLAN_TASK_ROWS_BASE, ...CLOSING_PLAN_TASK_ROWS_EXTENDED]
-    : CLOSING_PLAN_TASK_ROWS_BASE
-}
-
-/** Tasks visible for the current assignee filter (All tasks, My tasks, or selected people). */
-function closingTasksForFilters(userFilters: string[]): ClosingPlanTaskRow[] {
-  const showAll =
-    userFilters.length === 1 && userFilters[0] === CLOSING_USER_FILTER_ALL
-  const pool = closingPlanTaskPool(userFilters)
-  return showAll ? pool : pool.filter((row) => userFilters.includes(row.assigneeId))
-}
-
-type ClosingMetricsSummary = {
-  openTasks: number
-  totalTasks: number
-  percentClosed: number
-}
-
-function closingMetricsFromTasks(tasks: ClosingPlanTaskRow[]): ClosingMetricsSummary {
-  const totalTasks = tasks.length
-  const closedCount = tasks.filter((t) => t.status === 'ready').length
-  const openTasks = totalTasks - closedCount
-  const percentClosed =
-    totalTasks === 0 ? 0 : Math.round((closedCount / totalTasks) * 100)
-  return { openTasks, totalTasks, percentClosed }
-}
-
-function closingProgressBarsFromTasks(tasks: ClosingPlanTaskRow[]): LifecycleBarChartBar[] {
-  const counts: Record<string, number> = {
-    'not-started': 0,
-    ready: 0,
-    'in-process': 0,
-    waiting: 0,
-  }
-  for (const task of tasks) {
-    if (task.status in counts) {
-      counts[task.status] += 1
-    }
-  }
-  return CLOSING_PROGRESS_BAR_TEMPLATE.map((bar) => ({
-    ...bar,
-    value: counts[bar.id] ?? 0,
-  }))
-}
-
-function closingProgressChartYAxisMax(bars: LifecycleBarChartBar[]): number {
-  const maxVal = Math.max(0, ...bars.map((b) => b.value))
-  if (maxVal <= 0) return 3
-  if (maxVal <= 3) return 3
-  if (maxVal <= 5) return 5
-  if (maxVal <= 10) return 10
-  return Math.ceil(maxVal / 5) * 5
-}
-
-function assigneeLabelForRow(
-  row: ClosingPlanTaskRow,
-  assigneeOptions: Option[]
-): string {
-  return assigneeOptions.find((o) => o.value === row.assigneeId)?.label ?? row.assigneeName
-}
-
-function ClosingPlanTasksTableBody({
-  userFilters,
-  assigneeOptions,
-  showUserColumn,
-}: {
-  userFilters: string[]
-  assigneeOptions: Option[]
-  showUserColumn: boolean
-}) {
-  const visibleRows = closingTasksForFilters(userFilters)
-
-  const colSpan = showUserColumn ? 6 : 5
-
-  return (
-    <tbody>
-      {visibleRows.length === 0 ? (
-        <tr>
-          <td colSpan={colSpan} className="text-left text-secondary">
-            No tasks match the selected users.
-          </td>
-        </tr>
-      ) : (
-        visibleRows.map((row) => (
-          <tr key={row.id}>
-            <td className="text-left">{row.category}</td>
-            <td className="text-left">{row.task}</td>
-            <td className="text-left">
-              {row.applicationName == null ? (
-                '\u00A0'
-              ) : row.applicationHref ? (
-                <Link href={row.applicationHref}>{row.applicationName}</Link>
-              ) : (
-                row.applicationName
-              )}
-            </td>
-            {showUserColumn ? (
-              <td className="text-left">{assigneeLabelForRow(row, assigneeOptions)}</td>
-            ) : null}
-            <td className="text-left">{row.closingDay}</td>
-            <td className="text-left">{closingTaskStatusBadge(row.status)}</td>
-          </tr>
-        ))
-      )}
-    </tbody>
-  )
-}
+const CC_MAIN_TAB_IDS: readonly string[] = CC_MAIN_TABS.map((t) => t.id)
 
 const PO_DETAIL_TAB_PREFIX = 'po-detail:' as const
 
@@ -591,162 +204,90 @@ type RequisitionLineRow = {
   orgName: string
 }
 
-const REQUISITION_ROWS: RequisitionRow[] = [
-  {
-    id: 'PR-2041',
-    vendorId: 'VND-900101',
-    vendor: 'Acme Office Supplies',
-    amount: '$1,250.00',
-    statusLabel: 'In-Approval',
-    stageIndices: [0, 2],
-    overdue: '2/5',
-    overdueUrgent: true,
-    requestedBy: 'Alex Rivera',
-    organization: 'HQ — Procurement',
-    createdDate: 'Apr 2, 2025',
-    needBy: 'Apr 18, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 4,
-    lateItemsStageCounts: [1, 0, 1, 0],
-    requisitionerName: 'Jamie Chen',
-    requisitionerEmail: 'jamie.chen@contoso.com',
-  },
-  {
-    id: 'PR-2045',
-    vendorId: 'VND-900205',
-    vendor: 'Litware Medical Devices',
-    amount: '$3,890.25',
-    statusLabel: 'In-Approval',
-    stageIndices: [0, 2],
-    overdue: '1/6',
-    overdueUrgent: true,
-    requestedBy: 'Sam Lee',
-    organization: 'Region NA — Ops',
-    createdDate: 'Mar 28, 2025',
-    needBy: 'Apr 22, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 6,
-    lateItemsStageCounts: [0, 0, 1, 0],
-    requisitionerName: 'Sam Lee',
-    requisitionerEmail: 'sam.lee@contoso.com',
-  },
-  {
-    id: 'PR-2042',
-    vendorId: 'VND-900302',
-    vendor: 'Northwind Logistics LLC',
-    amount: '$8,420.50',
-    statusLabel: 'Pending PO Creation',
-    stageIndices: [0, 2, 3],
-    overdue: '1/4',
-    overdueUrgent: true,
-    requestedBy: 'Jordan Smith',
-    organization: 'HQ — Finance',
-    createdDate: 'Mar 15, 2025',
-    needBy: 'Apr 10, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 3,
-    lateItemsStageCounts: [0, 0, 0, 1],
-    requisitionerName: 'Jordan Smith',
-    requisitionerEmail: 'jordan.smith@contoso.com',
-  },
-  {
-    id: 'PR-2048',
-    vendorId: 'VND-900448',
-    vendor: 'Wide World Importers',
-    amount: '$22,150.00',
-    statusLabel: 'Pending PO Creation',
-    stageIndices: [0, 2, 3],
-    overdue: '4/9',
-    overdueUrgent: true,
-    requestedBy: 'Priya Nair',
-    organization: 'EMEA — Supply',
-    createdDate: 'Mar 20, 2025',
-    needBy: 'Apr 5, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 5,
-    lateItemsStageCounts: [1, 0, 2, 1],
-    requisitionerName: 'Priya Nair',
-    requisitionerEmail: 'priya.nair@contoso.com',
-  },
-  {
-    id: 'PR-2043',
-    vendorId: 'VND-900503',
-    vendor: 'Contoso Training Group',
-    amount: '$2,100.00',
-    statusLabel: 'Pending',
-    stageIndices: [0],
-    overdue: '1/3',
-    overdueUrgent: true,
-    requestedBy: 'Morgan Chen',
-    organization: 'HQ — L&D',
-    createdDate: 'Apr 8, 2025',
-    needBy: 'Apr 25, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 2,
-    lateItemsStageCounts: [1, 0, 0, 0],
-    requisitionerName: 'Morgan Chen',
-    requisitionerEmail: 'morgan.chen@contoso.com',
-  },
-  {
-    id: 'PR-2046',
-    vendorId: 'VND-900606',
-    vendor: 'Adventure Works IT',
-    amount: '$475.90',
-    statusLabel: 'Pending',
-    stageIndices: [0],
-    overdue: '0/2',
-    requestedBy: 'Casey Brooks',
-    organization: 'IT — Infrastructure',
-    createdDate: 'Apr 1, 2025',
-    needBy: 'Apr 30, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 1,
-    lateItemsStageCounts: [0, 0, 0, 0],
-    requisitionerName: 'Casey Brooks',
-    requisitionerEmail: 'casey.brooks@contoso.com',
-  },
-  {
-    id: 'PR-2044',
-    vendorId: 'VND-900704',
-    vendor: 'Fabrikam Facilities Inc.',
-    amount: '$640.00',
-    statusLabel: 'Rejected',
-    stageIndices: [0, 1],
-    overdue: '1/2',
-    overdueUrgent: true,
-    requestedBy: 'Riley Ortiz',
-    organization: 'Facilities — West',
-    createdDate: 'Feb 10, 2025',
-    needBy: 'Mar 1, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 0,
-    lateItemsStageCounts: [0, 1, 0, 0],
-    requisitionerName: 'Riley Ortiz',
-    requisitionerEmail: 'riley.ortiz@contoso.com',
-  },
-  {
-    id: 'PR-2047',
-    vendorId: 'VND-900807',
-    vendor: 'Blue Yonder Analytics',
-    amount: '$9,999.00',
-    statusLabel: 'Rejected',
-    stageIndices: [0, 2, 1],
-    overdue: '3/3',
-    overdueUrgent: true,
-    requestedBy: 'Taylor Kim',
-    organization: 'HQ — Analytics',
-    createdDate: 'Jan 22, 2025',
-    needBy: 'Feb 28, 2025',
-    bannerMessage: '',
-    buyerAssignedLineCount: 8,
-    lateItemsStageCounts: [0, 1, 1, 1],
-    requisitionerName: 'Taylor Kim',
-    requisitionerEmail: 'taylor.kim@contoso.com',
-  },
+const REQ_STATUS_STAGE_LABELS = [
+  'Pending',
+  'Rejected',
+  'In Approval',
+  'Pending PO Creation',
+] as const
+
+const REQUISITION_AI_ACTIONS = ['Create PO', 'Suggest Vendor', 'Create Quote'] as const
+type RequisitionAiAction = (typeof REQUISITION_AI_ACTIONS)[number]
+
+const REQUISITIONERS = [
+  { name: 'Jamie Chen', email: 'jamie.chen@contoso.com', org: 'HQ — Procurement' },
+  { name: 'Sam Lee', email: 'sam.lee@contoso.com', org: 'Region NA — Ops' },
+  { name: 'Jordan Smith', email: 'jordan.smith@contoso.com', org: 'HQ — Finance' },
+  { name: 'Priya Nair', email: 'priya.nair@contoso.com', org: 'EMEA — Supply' },
+  { name: 'Morgan Chen', email: 'morgan.chen@contoso.com', org: 'IT — Infrastructure' },
+] as const
+
+/** Stage index follows `REQUISITION_CHART_BARS` order (0 Pending … 3 Pending PO Creation). */
+const REQUISITION_ROW_SEED: ReadonlyArray<
+  [id: string, vendor: string, amount: string, stage: number, overdue: string]
+> = [
+  ['PR_0617_1', '', '5,326,650.00', 3, '9/10'],
+  ['PR-0000167', '', '1,000.00', 3, '0/1'],
+  ['PR-0000170', '', '3,763.60', 3, '0/1'],
+  ['PR-0000184', 'AAA Electronics', '1,053.00', 3, '0/1'],
+  ['PR-0000185', 'AAA Electronics', '1,053.00', 3, '0/1'],
+  ['PR-0000186', 'AAA Electronics', '1,053.00', 3, '0/1'],
+  ['PR-0000188', 'AAA Electronics', '2,106.00', 3, '0/2'],
+  ['PR-0000191', 'Blue Horizon Corp', '18,420.00', 3, '1/4'],
+  ['PR-0000193', 'Summit Enterprises', '7,560.25', 3, '0/3'],
+  ['PR-0000195', 'TechNova Systems', '12,980.00', 3, '2/5'],
+  ['PR-0000197', 'Apex Logistics', '4,215.75', 3, '0/2'],
+  ['PR-0000199', 'Global Tech Solutions', '26,300.00', 3, '1/6'],
+  ['PR-0000201', 'Ironclad Industries', '9,875.40', 3, '0/1'],
+  ['PR-0000203', 'Crystal Dynamics', '3,150.00', 3, '0/2'],
+  ['PR-0000205', 'Elite Services Group', '15,640.90', 3, '1/3'],
+  ['PR-0000207', 'AAA Electronics', '1,053.00', 3, '0/1'],
+  ['PR-0000210', 'Summit Enterprises', '6,480.00', 0, '1/3'],
+  ['PR-0000211', '', '2,250.00', 0, '0/1'],
+  ['PR-0000212', 'TechNova Systems', '11,325.50', 0, '2/4'],
+  ['PR-0000213', 'Blue Horizon Corp', '850.00', 0, '0/1'],
+  ['PR-0000214', 'Apex Logistics', '5,940.10', 0, '1/2'],
+  ['PR-0000215', 'Global Tech Solutions', '33,780.00', 0, '3/7'],
+  ['PR-0000216', 'Ironclad Industries', '4,402.65', 0, '0/2'],
+  ['PR-0000217', 'Crystal Dynamics', '1,975.00', 0, '0/1'],
+  ['PR-0000218', 'Elite Services Group', '8,615.30', 0, '1/5'],
+  ['PR-0000219', 'AAA Electronics', '1,053.00', 0, '0/1'],
+  ['PR-0000220', 'Summit Enterprises', '14,210.00', 0, '2/6'],
+  ['PR-0000221', 'TechNova Systems', '3,490.00', 1, '1/2'],
+  ['PR-0000222', 'Apex Logistics', '7,125.80', 1, '1/1'],
 ]
 
+const REQUISITION_ROWS: RequisitionRow[] = REQUISITION_ROW_SEED.map(
+  ([id, vendor, amount, stage, overdue], i) => {
+    const frac = parseOverdueFraction(overdue)
+    const late = frac?.late ?? 0
+    const requisitioner = REQUISITIONERS[i % REQUISITIONERS.length]
+    const lateItemsStageCounts: [number, number, number, number] = [0, 0, 0, 0]
+    lateItemsStageCounts[stage] = late
+    return {
+      id,
+      vendorId: vendor === '' ? '' : `VND-${900100 + i}`,
+      vendor,
+      amount,
+      statusLabel: REQ_STATUS_STAGE_LABELS[stage],
+      stageIndices: [stage],
+      overdue,
+      overdueUrgent: late > 0,
+      requestedBy: requisitioner.name,
+      organization: requisitioner.org,
+      createdDate: 'Sep 15, 2026',
+      needBy: 'Oct 30, 2026',
+      bannerMessage: '',
+      buyerAssignedLineCount: frac?.total ?? 1,
+      lateItemsStageCounts,
+      requisitionerName: requisitioner.name,
+      requisitionerEmail: requisitioner.email,
+    }
+  },
+)
+
 function requisitionLineRowsForPr(row: RequisitionRow): RequisitionLineRow[] {
-  const preferredVendor = `${row.vendorId} — ${row.vendor}`
+  const preferredVendor = row.vendor === '' ? '' : `${row.vendorId} — ${row.vendor}`
   const lineCount = Math.max(10, row.buyerAssignedLineCount)
   return Array.from({ length: lineCount }, (_, i) => {
     const n = i + 1
@@ -762,7 +303,7 @@ function requisitionLineRowsForPr(row: RequisitionRow): RequisitionLineRow[] {
           : 'Standard hardware line — non-stock'
     return {
       line: String(n),
-      status: statusEmpty ? '' : n === 1 ? 'In-Approval' : 'Buyer Review',
+      status: statusEmpty ? '' : n === 1 ? 'In Approval' : 'Buyer Review',
       projectId: `PRJ-${2400 + n}`,
       projectName: n % 2 === 0 ? 'HQ Facilities Refresh' : 'Field Services Expansion',
       item: `ITM-${row.id.replace(/^PR-/, '')}-${String(n).padStart(2, '0')}`,
@@ -805,42 +346,42 @@ function overdueLinesPercent(overdue: string): number | null {
   return Math.round((p.late / p.total) * 100)
 }
 
-/** Bar colors aligned with PO Command Center reference; requisitions use the first four tones. */
+/** PO lifecycle tones without Pending Inspection and Awaiting Payment. */
 const REQ_LIFECYCLE_COLORS = {
-  pendingSubmittal: '#f97316',
-  rejected: '#dc2626',
-  pendingApproval: '#ec4899',
-  pendingPoCreation: '#1d4ed8',
+  pendingSubmittal: '#ffa800',
+  rejected: '#dc3545',
+  pendingApproval: '#2c5f8a',
+  pendingPoCreation: '#3d6bf5',
 } as const
 
 export const REQUISITION_CHART_BARS: LifecycleBarChartBar[] = [
   {
     id: 'pending-submittal',
-    label: 'Pending',
-    value: 100,
+    label: REQ_STATUS_STAGE_LABELS[0],
+    value: 11,
     color: REQ_LIFECYCLE_COLORS.pendingSubmittal,
     description:
       'PR has been assigned to the Buyer and in Pending status',
   },
   {
     id: 'rejected',
-    label: 'Rejected',
-    value: 20,
+    label: REQ_STATUS_STAGE_LABELS[1],
+    value: 2,
     color: REQ_LIFECYCLE_COLORS.rejected,
     description: 'PR has been assigned to the Buyer and in Rejected status',
   },
   {
     id: 'pending-approval',
-    label: 'In-Approval',
-    value: 45,
+    label: REQ_STATUS_STAGE_LABELS[2],
+    value: 0,
     color: REQ_LIFECYCLE_COLORS.pendingApproval,
     description:
-      'PR has been assigned to the Buyer and In-Approval',
+      'PR has been assigned to the Buyer and In Approval',
   },
   {
     id: 'pending-po-creation',
-    label: 'Pending PO Creation',
-    value: 60,
+    label: REQ_STATUS_STAGE_LABELS[3],
+    value: 16,
     color: REQ_LIFECYCLE_COLORS.pendingPoCreation,
     description:
       'PR has been assigned to the Buyer and Approved',
@@ -848,12 +389,12 @@ export const REQUISITION_CHART_BARS: LifecycleBarChartBar[] = [
 ]
 
 const PO_CHART_BARS: LifecycleBarChartBar[] = [
-  { id: 'po-pending-approval', label: 'In-Approval', value: 168, color: '#f97316' },
-  { id: 'po-pending-receipt', label: 'Pending Receipt', value: 166, color: '#dc2626' },
-  { id: 'po-pending-inspection', label: 'Pending Inspection', value: 40, color: '#ec4899' },
-  { id: 'po-awaiting-inv', label: 'Awaiting Invoice', value: 29, color: '#1d4ed8' },
-  { id: 'po-pending-inv-approval', label: 'Pending Inv Approval', value: 54, color: '#38bdf8' },
-  { id: 'po-awaiting-payment', label: 'Awaiting Payment', value: 39, color: '#9ca3af' },
+  { id: 'po-pending-approval', label: 'Pending Approval', value: 168, color: '#ffa800' },
+  { id: 'po-pending-receipt', label: 'Pending Receipt', value: 166, color: '#dc3545' },
+  { id: 'po-pending-inspection', label: 'Pending Inspection', value: 40, color: '#ff4f7b' },
+  { id: 'po-awaiting-inv', label: 'Awaiting Invoice', value: 29, color: '#2c5f8a' },
+  { id: 'po-pending-inv-approval', label: 'Pending Inv Approval', value: 54, color: '#3d6bf5' },
+  { id: 'po-awaiting-payment', label: 'Awaiting Payment', value: 39, color: '#8a8a8a' },
 ]
 
 /**
@@ -875,13 +416,6 @@ const REQ_STATUS_DOT_COLORS = [
   REQ_LIFECYCLE_COLORS.rejected,
   REQ_LIFECYCLE_COLORS.pendingApproval,
   REQ_LIFECYCLE_COLORS.pendingPoCreation,
-] as const
-
-const REQ_STATUS_STAGE_LABELS = [
-  'Pending',
-  'Rejected',
-  'In-Approval',
-  'Pending PO Creation',
 ] as const
 
 const PO_LIFECYCLE_STAGE_COLORS = PO_CHART_BARS.map((b) => b.color) as readonly string[]
@@ -1027,7 +561,10 @@ export const REQUISITION_TABLE_HEADER = (
       {commandCenterHeaderTh('Preferred Vendor Name')}
       {commandCenterHeaderTh('Total Amount', 'right')}
       {commandCenterHeaderTh('Status')}
-      {commandCenterHeaderTh('Overdue')}
+      {commandCenterHeaderTh('Overdue Lines', 'right')}
+      <th className="text-left" scope="col">
+        Action
+      </th>
     </tr>
   </thead>
 )
@@ -1094,18 +631,107 @@ function PrLineDetailsTableBody({ rows }: { rows: RequisitionLineRow[] }) {
   )
 }
 
+function RequisitionActionCell({
+  row,
+  menuOpen,
+  onToggleMenu,
+  onAction,
+}: {
+  row: RequisitionRow
+  menuOpen: boolean
+  onToggleMenu: () => void
+  onAction: (action: RequisitionAiAction, row: RequisitionRow) => void
+}) {
+  const [primaryAction, ...moreActions] = REQUISITION_AI_ACTIONS
+  const actionsRef = useRef<HTMLDivElement>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!menuOpen || actionsRef.current == null) {
+      setMenuPosition(null)
+      return
+    }
+    const bounds = actionsRef.current.getBoundingClientRect()
+    setMenuPosition({ top: bounds.bottom + 4, right: window.innerWidth - bounds.right })
+  }, [menuOpen])
+
+  return (
+    <td
+      className="command-center-row-actions-cell"
+      data-cc-ignore
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <div className="command-center-row-actions" ref={actionsRef}>
+        <Button
+          type="button"
+          variant="primary"
+          size="xs"
+          className="command-center-row-actions__primary"
+          ariaLabel={`${primaryAction} for ${row.id} (AI processed)`}
+          onClick={() => onAction(primaryAction, row)}
+        >
+          <img src="/Stars.svg" alt="" className="command-center-ai-sparkle" />
+          {primaryAction}
+        </Button>
+        <button
+          type="button"
+          className="command-center-row-actions__toggle"
+          aria-label={`More AI actions for ${row.id}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={onToggleMenu}
+        >
+          <Icon name={menuOpen ? 'chevron-up' : 'chevron-down'} size="xs" />
+        </button>
+        {menuOpen && menuPosition != null && (
+          <div className="command-center-row-actions__menu-layer" style={menuPosition}>
+            <ListMenu
+              variant="no-borders"
+              items={moreActions.map((label) => ({
+                label,
+                isCustom: true,
+                customSrc: '/Stars.svg',
+              }))}
+              onItemClick={(_item, index) => onAction(moreActions[index], row)}
+            />
+          </div>
+        )}
+      </div>
+    </td>
+  )
+}
+
 export function RequisitionTableBody({
   rows,
   selectedId,
   onSelectRow,
+  onAction,
   lifecycleChartFilterStageIndices = null,
 }: {
   rows: RequisitionRow[]
   selectedId: string | null
   onSelectRow: (id: string) => void
+  onAction: (action: RequisitionAiAction, row: RequisitionRow) => void
   /** When non-empty (bar chart filter), status column shows one marker per selected stage. */
   lifecycleChartFilterStageIndices?: readonly number[] | null
 }) {
+  const [menuRowId, setMenuRowId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (menuRowId == null) return
+    const close = (event: globalThis.MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('.command-center-row-actions')) setMenuRowId(null)
+    }
+    const closeOnScroll = () => setMenuRowId(null)
+    document.addEventListener('mousedown', close)
+    window.addEventListener('scroll', closeOnScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('scroll', closeOnScroll, true)
+    }
+  }, [menuRowId])
+
   return (
     <tbody>
       {rows.map((row) => (
@@ -1129,7 +755,21 @@ export function RequisitionTableBody({
           <td>{row.vendor}</td>
           <td className="text-right">{row.amount}</td>
           {reqStatusTrailCell(row.statusLabel, row.stageIndices, lifecycleChartFilterStageIndices ?? null)}
-          <td style={row.overdueUrgent ? { color: 'var(--color-error)' } : undefined}>{row.overdue}</td>
+          <td
+            className="text-right"
+            style={row.overdueUrgent ? { color: 'var(--color-error)' } : undefined}
+          >
+            {row.overdue}
+          </td>
+          <RequisitionActionCell
+            row={row}
+            menuOpen={menuRowId === row.id}
+            onToggleMenu={() => setMenuRowId((prev) => (prev === row.id ? null : row.id))}
+            onAction={(action, actionRow) => {
+              setMenuRowId(null)
+              onAction(action, actionRow)
+            }}
+          />
         </tr>
       ))}
     </tbody>
@@ -1429,40 +1069,39 @@ type PoTableRowData = {
   overdueUrgent?: boolean
 }
 
-export const PO_TABLE_ROWS: PoTableRowData[] = [
-  {
-    id: 'PO-1039',
-    release: 'REL-2024-001',
-    type: 'Standard PO',
-    vendor: 'Acme Office Co.',
-    amount: '$12,400.00',
-    statusLabel: 'Awaiting invoice, receipt, pending approval',
-    stageIndices: [3, 1, 0],
-    overdueLines: '5/7',
-    overdueUrgent: true,
-  },
-  {
-    id: 'PO-1040',
-    release: 'REL-2024-014',
-    type: 'Blanket PO',
-    vendor: 'Northwind Logistics',
-    amount: '$3,210.50',
-    statusLabel: 'Awaiting invoice and receipt',
-    stageIndices: [3, 1],
-    overdueLines: '2/4',
-    overdueUrgent: true,
-  },
-  {
-    id: 'PO-1041',
-    release: 'REL-2024-022',
-    type: 'Sub Contract',
-    vendor: 'Contoso Services',
-    amount: '$18,990.00',
-    statusLabel: 'Inspection, receipt, pending approval',
-    stageIndices: [2, 1, 0],
-    overdueLines: '0/3',
-  },
+/** Stage indices follow `PO_CHART_BARS` order (0 Pending Approval … 5 Awaiting Payment). */
+const PO_TABLE_ROW_SEED: ReadonlyArray<
+  [id: string, type: string, vendor: string, amount: string, stages: readonly number[], overdue: string]
+> = [
+  ['PO-1039', 'Blanket PO', 'Blue Horizon Corp', '839030.96', [5, 2, 0], '3/7'],
+  ['PO-1083', 'Blanket PO', 'Elite Services Group', '563747.10', [3, 1], '3/8'],
+  ['PO-1091', 'Blanket PO', 'Ironclad Industries', '203678.31', [5, 1, 2], '3/7'],
+  ['PO-1095', 'Blanket PO', 'Elite Services Group', '508999.40', [3, 2], '3/8'],
+  ['PO-1004', 'Standard PO', 'Summit Enterprises', '163595.70', [0], '2/8'],
+  ['PO-1022', 'Sub Contract', 'TechNova Systems', '296306.50', [2, 1], '2/5'],
+  ['PO-1013', 'Contract', 'Apex Logistics', '768436.99', [4, 0, 1], '2/7'],
+  ['PO-1019', 'Blanket PO', 'Ironclad Industries', '855876.66', [4, 3, 5], '2/7'],
+  ['PO-1028', 'Standard PO', 'Summit Enterprises', '241069.39', [0], '2/5'],
+  ['PO-1052', 'Standard PO', 'Summit Enterprises', '119112.27', [1], '2/7'],
+  ['PO-1060', 'Standard PO', 'Global Tech Solutions', '737734.98', [5, 0, 2], '2/6'],
+  ['PO-1084', 'Standard PO', 'Global Tech Solutions', '579477.67', [5, 2, 4], '2/7'],
+  ['PO-1069', 'Contract', 'Crystal Dynamics', '370136.17', [0], '2/6'],
+  ['PO-1094', 'Sub Contract', 'TechNova Systems', '456192.45', [2, 4], '2/6'],
 ]
+
+export const PO_TABLE_ROWS: PoTableRowData[] = PO_TABLE_ROW_SEED.map(
+  ([id, type, vendor, amount, stages, overdue]) => ({
+    id,
+    release: id,
+    type,
+    vendor,
+    amount,
+    statusLabel: stages.map((i) => PO_CHART_BARS[i]?.label ?? `Stage ${i}`).join(', '),
+    stageIndices: stages,
+    overdueLines: overdue,
+    overdueUrgent: true,
+  }),
+)
 
 export const PO_TABLE_HEADER = (
   <thead>
@@ -1473,7 +1112,7 @@ export const PO_TABLE_HEADER = (
       {commandCenterHeaderTh('Vendor Name')}
       {commandCenterHeaderTh('Total Amt', 'right')}
       {commandCenterHeaderTh('Status')}
-      {commandCenterHeaderTh('Overdue Lines', 'right')}
+      {commandCenterHeaderTh('Overdue Lines')}
     </tr>
   </thead>
 )
@@ -1510,10 +1149,7 @@ export function PoPurchaseOrdersTableBody({
           <td>{row.vendor}</td>
           <td className="text-right">{row.amount}</td>
           {poLifecycleStatusCell(row.statusLabel, row.stageIndices, lifecycleChartFilterStageIndices ?? null)}
-          <td
-            className="text-right"
-            style={row.overdueUrgent ? { color: 'var(--color-error)' } : undefined}
-          >
+          <td style={row.overdueUrgent ? { color: 'var(--color-error)' } : undefined}>
             {row.overdueLines}
           </td>
         </tr>
@@ -1619,7 +1255,7 @@ export function RequisitionDetailsTabView({ prId }: { prId: string }) {
           <div className="command-center-pr-summary-panel__cell">
             <div className="command-center-pr-summary-panel__label">Preferred Vendor</div>
             <div className="command-center-pr-summary-panel__value">
-              {row.vendorId} — {row.vendor}
+              {row.vendor === '' ? '\u00A0' : `${row.vendorId} — ${row.vendor}`}
             </div>
           </div>
           <div className="command-center-pr-summary-panel__cell">
@@ -1655,81 +1291,88 @@ export function RequisitionDetailsTabView({ prId }: { prId: string }) {
   )
 }
 
-function HomeShell() {
-  const [prototypeVersion, setPrototypeVersion] = useState('v1')
-  const [useCaseScenario, setUseCaseScenario] = useState('end-to-end')
-  const closeThroughDelaEnabled = useCaseScenario !== 'dela-not-enabled'
-  const missingDefaultJob = useCaseScenario === 'missing-default-job'
-  const [activeTabId, setActiveTabId] = useState<string>('closing-manager')
-  const [refreshTick, setRefreshTick] = useState(0)
-  const [roleFilter, setRoleFilter] = useState('accountant')
-  const [assigneeOptions, setAssigneeOptions] = useState<Option[]>(BASE_CLOSING_ASSIGNEE_OPTIONS)
+const ALL_LIFECYCLE_PROJECT_IDS = DEFAULT_LIFECYCLE_PROJECTS.map((p) => p.id)
 
-  const handleAddAssigneeFromSearch = useCallback((label: string): Option => {
-    const trimmed = label.trim()
-    let resolved!: Option
-    setAssigneeOptions((prev) => {
-      const hit = prev.find((o) => o.label.trim().toLowerCase() === trimmed.toLowerCase())
-      if (hit) {
-        resolved = hit
-        return prev
-      }
-      resolved = { value: `assignee-${Date.now()}`, label: trimmed }
-      return [...prev, resolved]
-    })
-    return resolved
-  }, [])
-  const [userFilters, setUserFilters] = useState<string[]>([CLOSING_CURRENT_USER_ID])
-  const roleDropdownId = useId().replace(/:/g, '')
-  const userDropdownId = useId().replace(/:/g, '')
+function toggleListValue(list: readonly string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
+}
+
+function stageIndicesForBarIds(bars: LifecycleBarChartBar[], barIds: readonly string[]): number[] {
+  return bars.flatMap((bar, i) => (barIds.includes(bar.id) ? [i] : []))
+}
+
+/** Rows that sit in any of the selected lifecycle stages (all rows when no stage is selected). */
+function rowsMatchingStages<T extends { stageIndices: readonly number[] }>(
+  rows: readonly T[],
+  stages: readonly number[],
+): T[] {
+  if (stages.length === 0) return [...rows]
+  return rows.filter((row) => row.stageIndices.some((i) => stages.includes(i)))
+}
+
+function HomeShell() {
+  const [activeTabId, setActiveTabId] = useState<string>('requisitions')
+  const [delaPrompt, setDelaPrompt] = useState<{ id: number; text: string } | null>(null)
+  const [openDelaRequest, setOpenDelaRequest] = useState(0)
+  const [detailTabs, setDetailTabs] = useState<{ id: string; label: string }[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [selectedPrId, setSelectedPrId] = useState<string | null>(null)
+  const [reqChartFilter, setReqChartFilter] = useState<string[]>([])
+  const [poChartFilter, setPoChartFilter] = useState<string[]>([])
+  const [reqProjects, setReqProjects] = useState<string[]>(ALL_LIFECYCLE_PROJECT_IDS)
+  const [poProjects, setPoProjects] = useState<string[]>(ALL_LIFECYCLE_PROJECT_IDS)
   const themeProps = THEME_SHELL_PROPS[DEFAULT_THEME] ?? THEME_SHELL_PROPS['theme-cp']
 
-  const closingPlanShowUser = useMemo(
-    () => closingPlanShowUserColumn(userFilters),
-    [userFilters],
+  const reqFilterStages = useMemo(
+    () => stageIndicesForBarIds(REQUISITION_CHART_BARS, reqChartFilter),
+    [reqChartFilter],
   )
+  const poFilterStages = useMemo(
+    () => stageIndicesForBarIds(PO_CHART_BARS, poChartFilter),
+    [poChartFilter],
+  )
+  const visibleReqRows = useMemo(
+    () => rowsMatchingStages(REQUISITION_ROWS, reqFilterStages),
+    [reqFilterStages],
+  )
+  const visiblePoRows = useMemo(
+    () => rowsMatchingStages(PO_TABLE_ROWS, poFilterStages),
+    [poFilterStages],
+  )
+  const selectedPr = visibleReqRows.find((r) => r.id === selectedPrId) ?? null
 
-  const closingPlanSortColumns = useMemo(
-    () =>
-      closingPlanShowUser ? CLOSING_PLAN_SORT_COLUMNS_WITH_USER : CLOSING_PLAN_SORT_COLUMNS_BASE,
-    [closingPlanShowUser],
-  )
+  const openDetailTab = (id: string, label: string) => {
+    setDetailTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, label }]))
+    setActiveTabId(id)
+  }
 
-  const closingVisibleTasks = useMemo(
-    () => closingTasksForFilters(userFilters),
-    [userFilters],
-  )
-
-  const closingMetrics = useMemo(
-    () => closingMetricsFromTasks(closingVisibleTasks),
-    [closingVisibleTasks],
-  )
-
-  const closingProgressBars = useMemo(
-    () => closingProgressBarsFromTasks(closingVisibleTasks),
-    [closingVisibleTasks],
-  )
-
-  const closingProgressYAxisMax = useMemo(
-    () => closingProgressChartYAxisMax(closingProgressBars),
-    [closingProgressBars],
-  )
+  const closeDetailTab = (id: string) => {
+    setDetailTabs((prev) => prev.filter((t) => t.id !== id))
+    if (activeTabId === id) {
+      setActiveTabId(prIdFromDetailTabId(id) != null ? 'requisitions' : 'purchase-orders')
+    }
+  }
 
   const commandCenterTabs = useMemo(
-    () =>
-      CC_MAIN_TAB_IDS.map((id) => ({
-        id,
-        label:
-          id === 'general-ledger'
-            ? 'General Ledger'
-            : id === 'financial-review'
-              ? 'Financial Review'
-              : 'Closing Manager',
-        active: activeTabId === id,
+    () => [
+      ...CC_MAIN_TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        active: activeTabId === t.id,
         showClose: false as const,
       })),
-    [activeTabId],
+      ...detailTabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        active: activeTabId === t.id,
+        showClose: true as const,
+      })),
+    ],
+    [activeTabId, detailTabs],
   )
+
+  const activePoDetailId = poIdFromDetailTabId(activeTabId)
+  const activePrDetailId = prIdFromDetailTabId(activeTabId)
 
   const floatingNavActions = (
     <>
@@ -1754,50 +1397,22 @@ function HomeShell() {
       className="command-center-shell"
       pageHeaderTitle="Command Center"
       pageHeaderShowDefaultButtons={false}
-      pageHeaderActions={
-        <Dropdown
-          id="cc-use-case-scenario"
-          name="useCaseScenario"
-          className="command-center-use-case"
-          triggerClassName="btn btn--outline btn--md"
-          triggerIconSize="sm"
-          options={USE_CASE_SCENARIO_OPTIONS}
-          value={useCaseScenario}
-          onChange={setUseCaseScenario}
-        />
-      }
       companyName="Company name (system/environment name)"
-      brandAccessory={
-        <Dropdown
-          id="cc-prototype-version"
-          name="prototypeVersion"
-          className="header__version"
-          options={PROTOTYPE_VERSION_OPTIONS}
-          value={prototypeVersion}
-          onChange={setPrototypeVersion}
-          triggerIconSize="sm"
-        />
-      }
+      leftSidebarSections={COSTPOINT_LEFT_RAIL}
       floatingNavActions={floatingNavActions}
       rightSidebarSections={COMMAND_CENTER_RIGHT_RAIL}
       rightSidebarAlign="content"
       rightSidebarTopAnchor='[aria-label="Refresh"]'
       rightShellPanelVariant="dela"
       rightShellPanelBottomAlign="content"
+      rightShellPanelOpenDelaRequest={openDelaRequest}
       rightShellPanelDelaSlot={
-        prototypeVersion === 'v2' ? (
-          <DelaPanelContentV2
-            key={`v2-${useCaseScenario}`}
-            closeThroughDelaEnabled={closeThroughDelaEnabled}
-            missingDefaultJob={missingDefaultJob}
-          />
-        ) : (
-          <DelaPanelContent
-            key={`v1-${useCaseScenario}`}
-            closeThroughDelaEnabled={closeThroughDelaEnabled}
-            missingDefaultJob={missingDefaultJob}
-          />
-        )
+        <DelaPanelContent
+          closeThroughDelaEnabled
+          missingDefaultJob={false}
+          externalPrompt={delaPrompt}
+          onExternalPromptConsumed={() => setDelaPrompt(null)}
+        />
       }
     >
       <Card primary elevated className="command-center-home">
@@ -1806,46 +1421,15 @@ function HomeShell() {
             <TabStrip
               tabs={commandCenterTabs}
               onTabSelected={(id: string) => {
-                if ((CC_MAIN_TAB_IDS as readonly string[]).includes(id)) {
+                if (CC_MAIN_TAB_IDS.includes(id) || detailTabs.some((t) => t.id === id)) {
                   setActiveTabId(id)
                 }
               }}
+              onCloseTab={closeDetailTab}
               overflowMode="none"
               className="tabstrip--command-center-tabs"
             />
-            <div className="command-center-toolbar-cluster" aria-label="Closing filters">
-              <Dropdown
-                id={`cc-closing-role-${roleDropdownId}`}
-                name="closingRole"
-                triggerClassName="btn btn--outline btn--md"
-                triggerIconSize="sm"
-                options={CLOSING_ROLE_OPTIONS}
-                value={roleFilter}
-                onChange={setRoleFilter}
-              />
-              <Dropdown
-                id={`cc-closing-user-${userDropdownId}`}
-                name="closingAssignees"
-                multiple
-                multipleCommitMode="apply-cancel"
-                panelSearchable
-                panelSearchPlaceholder="Search"
-                onAddSearchResult={handleAddAssigneeFromSearch}
-                values={userFilters}
-                onValuesChange={setUserFilters}
-                allOptionValue={CLOSING_USER_FILTER_ALL}
-                allUsersCheckboxLabel="All tasks"
-                allOptionRowHint="all tasks"
-                clearAllUsersFallbackValue={CLOSING_CURRENT_USER_ID}
-                currentUserOptionValue={CLOSING_CURRENT_USER_ID}
-                currentUserTriggerLabel="My tasks"
-                currentUserRowHint="my tasks"
-                triggerClassName="btn btn--outline btn--md"
-                triggerIconSize="sm"
-                options={assigneeOptions}
-                placeholder="Users"
-                triggerFixedWidth="156px"
-              />
+            <div className="command-center-toolbar-cluster">
               <Button
                 type="button"
                 variant="outline"
@@ -1857,82 +1441,88 @@ function HomeShell() {
             </div>
           </div>
 
-          {activeTabId === 'closing-manager' && (
-            <>
-              <section className="closing-manager-section" aria-labelledby="closing-metrics-heading">
-                <h2 id="closing-metrics-heading" className="closing-manager-section__title">
-                  Closing Metrics
-                </h2>
-                <div className="closing-metrics-row">
-                  <div className="closing-metric-card">
-                    <div className="closing-metric-card__label">Open Tasks</div>
-                    <div className="closing-metric-card__value">{closingMetrics.openTasks}</div>
-                  </div>
-                  <div className="closing-metric-card">
-                    <div className="closing-metric-card__label">Total Tasks</div>
-                    <div className="closing-metric-card__value">{closingMetrics.totalTasks}</div>
-                  </div>
-                  <div className="closing-metric-card">
-                    <div className="closing-metric-card__label">Percent Closed</div>
-                    <div className="closing-metric-card__value">{closingMetrics.percentClosed}%</div>
-                  </div>
-                </div>
-              </section>
-
-              <LifecycleBarChart
-                key={`${refreshTick}-${userFilters.join(',')}`}
-                title="Closing Progress"
-                bars={closingProgressBars}
-                yAxisMax={closingProgressYAxisMax}
-                className="closing-manager-progress-chart"
-              />
-
-              <section className="closing-manager-section" aria-labelledby="closing-tasks-heading">
-                <h2 id="closing-tasks-heading" className="closing-manager-section__title">
-                  Closing Plan Tasks
-                </h2>
+          {activeTabId === 'requisitions' && (
+            <LifecycleBarChart
+              key={`req-${refreshTick}`}
+              title="Requisition Lifecycle"
+              headerActions={
+                <ProjectFilterControl
+                  projects={DEFAULT_LIFECYCLE_PROJECTS}
+                  value={reqProjects}
+                  onChange={setReqProjects}
+                />
+              }
+              bars={REQUISITION_CHART_BARS}
+              yAxisMax={20}
+              selectedBarIds={reqChartFilter}
+              onBarToggle={(id) => setReqChartFilter((prev) => toggleListValue(prev, id))}
+              tableWrapperClassName="command-center-table-detail-anchor"
+            >
+              <div className="command-center-table-detail-stack">
                 <Table
-                  variant="commandCenter"
+                  headerVariant="white"
                   striped
-                  className="command-center-data-table closing-plan-tasks-table"
-                  sortColumns={closingPlanSortColumns}
-                  commandCenterToolbar={
-                    <div className="closing-plan-toolbar">
-                      <Button type="button" variant="outline" size="lg">
-                        Collapse All
-                      </Button>
-                      <Button type="button" variant="outline" size="lg">
-                        Expand All
-                      </Button>
-                    </div>
-                  }
+                  className="command-center-data-table"
+                  header={REQUISITION_TABLE_HEADER}
                   body={
-                    <ClosingPlanTasksTableBody
-                      userFilters={userFilters}
-                      assigneeOptions={assigneeOptions}
-                      showUserColumn={closingPlanShowUser}
+                    <RequisitionTableBody
+                      rows={visibleReqRows}
+                      selectedId={selectedPr?.id ?? null}
+                      onSelectRow={(id) => setSelectedPrId((prev) => (prev === id ? null : id))}
+                      onAction={(action, row) => {
+                        if (action !== 'Create PO') return
+                        setDelaPrompt({ id: Date.now(), text: `Create PO for ${row.id}` })
+                        setOpenDelaRequest((n) => n + 1)
+                      }}
+                      lifecycleChartFilterStageIndices={reqFilterStages}
                     />
                   }
                 />
-              </section>
-            </>
+              </div>
+              {selectedPr != null && (
+                <RequisitionSidePanel
+                  row={selectedPr}
+                  onClose={() => setSelectedPrId(null)}
+                  onOpenRequisitionReportTab={(prId) => openDetailTab(prDetailTabId(prId), prId)}
+                />
+              )}
+            </LifecycleBarChart>
           )}
 
-          {activeTabId === 'general-ledger' && (
-            <div className="command-center-tab-placeholder">
-              <p className="text-secondary">
-                General Ledger (placeholder). Use the Closing Manager tab for the closing dashboard.
-              </p>
-            </div>
+          {activeTabId === 'purchase-orders' && (
+            <LifecycleBarChart
+              key={`po-${refreshTick}`}
+              title="PO Lifecycle"
+              headerActions={
+                <ProjectFilterControl
+                  projects={DEFAULT_LIFECYCLE_PROJECTS}
+                  value={poProjects}
+                  onChange={setPoProjects}
+                />
+              }
+              bars={PO_CHART_BARS}
+              yAxisMax={200}
+              selectedBarIds={poChartFilter}
+              onBarToggle={(id) => setPoChartFilter((prev) => toggleListValue(prev, id))}
+            >
+              <Table
+                headerVariant="white"
+                striped
+                className="command-center-data-table"
+                header={PO_TABLE_HEADER}
+                body={
+                  <PoPurchaseOrdersTableBody
+                    rows={visiblePoRows}
+                    onOpenOrder={(poId) => openDetailTab(poDetailTabId(poId), poId)}
+                    lifecycleChartFilterStageIndices={poFilterStages}
+                  />
+                }
+              />
+            </LifecycleBarChart>
           )}
 
-          {activeTabId === 'financial-review' && (
-            <div className="command-center-tab-placeholder">
-              <p className="text-secondary">
-                Financial Review (placeholder). Use the Closing Manager tab for the closing dashboard.
-              </p>
-            </div>
-          )}
+          {activePoDetailId != null && <PoOrderDetailView poId={activePoDetailId} />}
+          {activePrDetailId != null && <RequisitionDetailsTabView prId={activePrDetailId} />}
         </div>
       </Card>
     </ShellLayout>
